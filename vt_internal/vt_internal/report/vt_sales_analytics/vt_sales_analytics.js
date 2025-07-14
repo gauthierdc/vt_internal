@@ -27,6 +27,7 @@ frappe.query_reports["VT Sales Analytics"] = {
 				}
 				vq_filter.refresh();
 				vq_filter.set_input(vq_filter.value);
+				report.refresh(); // Ajout : recharge le rapport quand tree_type change
 			}
 		},
 		{
