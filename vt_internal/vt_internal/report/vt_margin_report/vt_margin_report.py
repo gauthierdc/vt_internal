@@ -21,16 +21,16 @@ def get_columns(filters):
     fieldname = grouped_by.lower().replace(" ", "_")  # e.g., "centre_de_coût" -> "centre_de_cout", but since French, adjust
     if grouped_by == "Project":
         fieldname = "project"
-    elif grouped_by == "Société":
+    elif grouped_by == "Company":
         fieldname = "company"
-    elif grouped_by == "Centre de coût":
+    elif grouped_by == "cost_center":
         fieldname = "cost_center"
 
     columns = [{
         "label": _(grouped_by),
         "fieldname": fieldname,
         "fieldtype": "Link",
-        "options": grouped_by if grouped_by != "Centre de coût" else "Cost Center",
+        "options": grouped_by,
         "width": 200
     }]
 
@@ -42,12 +42,24 @@ def get_columns(filters):
             "fieldtype": "Percent",
             "width": 120
         })
+        columns.append({
+            "label": period["label"] + " Montant",
+            "fieldname": period["key"] + "_montant",
+            "fieldtype": "Currency",
+            "width": 150
+        })
 
     columns.append({
         "label": _("Total"),
         "fieldname": "total",
         "fieldtype": "Percent",
         "width": 120
+    })
+    columns.append({
+        "label": _("Total Montant"),
+        "fieldname": "total_montant",
+        "fieldtype": "Currency",
+        "width": 150
     })
 
     return columns
@@ -168,8 +180,9 @@ def get_data(filters):
 
     periods = get_periods(filters)
     data = []
+    print("Periods:", aggregated.keys())
     fieldname = get_fieldname(grouped_by)
-
+		
     for group in sorted(aggregated.keys()):
         row = {fieldname: group}
         group_total_real_vente = 0
@@ -190,16 +203,21 @@ def get_data(filters):
                 val = real_m if value_type == "Marge réelle" else real_m - theo_m
                 row[p_key] = val
 
+                montant_val = (rv - rc) if value_type == "Marge réelle" else ((rv - rc) - (tv - tc))
+                row[p_key + "_montant"] = montant_val
+
                 group_total_real_vente += rv
                 group_total_real_cost += rc
                 group_total_theo_vente += tv
                 group_total_theo_cost += tc
             else:
                 row[p_key] = 0
+                row[p_key + "_montant"] = 0
 
         group_total_real_m = (group_total_real_vente - group_total_real_cost) / group_total_real_vente * 100 if group_total_real_vente > 0 else 0
         group_total_theo_m = (group_total_theo_vente - group_total_theo_cost) / group_total_theo_vente * 100 if group_total_theo_vente > 0 else 0
         row["total"] = group_total_real_m if value_type == "Marge réelle" else group_total_real_m - group_total_theo_m
+        row["total_montant"] = (group_total_real_vente - group_total_real_cost) if value_type == "Marge réelle" else ((group_total_real_vente - group_total_real_cost) - (group_total_theo_vente - group_total_theo_cost))
         data.append(row)
 
     # Grand Total row
@@ -208,6 +226,7 @@ def get_data(filters):
         grand_total_real_m = (grand_real_vente - grand_real_cost) / grand_real_vente * 100 if grand_real_vente > 0 else 0
         grand_total_theo_m = (grand_theo_vente - grand_theo_cost) / grand_theo_vente * 100 if grand_theo_vente > 0 else 0
         total_row["total"] = grand_total_real_m if value_type == "Marge réelle" else grand_total_real_m - grand_total_theo_m
+        total_row["total_montant"] = (grand_real_vente - grand_real_cost) if value_type == "Marge réelle" else ((grand_real_vente - grand_real_cost) - (grand_theo_vente - grand_theo_cost))
 
         for period in periods:
             p_key = period["key"]
@@ -221,8 +240,12 @@ def get_data(filters):
                 theo_m = (tv - tc) / tv * 100 if tv > 0 else 0
                 val = real_m if value_type == "Marge réelle" else real_m - theo_m
                 total_row[p_key] = val
+
+                montant_val = (rv - rc) if value_type == "Marge réelle" else ((rv - rc) - (tv - tc))
+                total_row[p_key + "_montant"] = montant_val
             else:
                 total_row[p_key] = 0
+                total_row[p_key + "_montant"] = 0
 
         data.append(total_row)
 
@@ -268,17 +291,17 @@ def get_period_key(end_date, range_type):
 def get_group_value(grouped_by, project):
     if grouped_by == "Project":
         return project["project"]
-    elif grouped_by == "Société":
+    elif grouped_by == "company":
         return project["company"]
-    elif grouped_by == "Centre de coût":
-        return project["cost_center"]
+    elif grouped_by == "Cost Center":
+        return project["cost_center"] or ""
 
 def get_fieldname(grouped_by):
     if grouped_by == "Project":
         return "project"
-    elif grouped_by == "Société":
+    elif grouped_by == "Company":
         return "company"
-    elif grouped_by == "Centre de coût":
+    elif grouped_by == "Cost Center":
         return "cost_center"
 
 def get_real_vente_cost(analysis_axis, project):
