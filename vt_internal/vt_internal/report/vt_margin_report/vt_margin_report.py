@@ -269,9 +269,12 @@ def get_conditions(filters):
         params["project"] = filters["project"]
 
     if filters.get("cost_center"):
-        conditions.append("p.cost_center = %(cost_center)s")
-        params["cost_center"] = filters["cost_center"]
-
+        cc = filters["cost_center"]
+        descendants = frappe.db.get_descendants("Cost Center", cc)
+        centers = [cc] + descendants
+        conditions.append("p.cost_center IN %(cost_centers)s")
+        params["cost_centers"] = centers
+        
     if filters.get("quotation_owner"):
         conditions.append("p.custom_project_manager = %(quotation_owner)s")
         params["quotation_owner"] = filters["quotation_owner"]
@@ -291,7 +294,7 @@ def get_period_key(end_date, range_type):
 def get_group_value(grouped_by, project):
     if grouped_by == "Project":
         return project["project"]
-    elif grouped_by == "company":
+    elif grouped_by == "Company":
         return project["company"]
     elif grouped_by == "Cost Center":
         return project["cost_center"] or ""
