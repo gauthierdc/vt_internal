@@ -37,9 +37,9 @@ def get_columns(filters):
     periods = get_periods(filters)
     for period in periods:
         columns.append({
-            "label": period["label"],
+            "label": period["label"] if filters["value"] == "Marge réelle" else period["label"] + " (pp)",
             "fieldname": period["key"],
-            "fieldtype": "Percent",
+            "fieldtype": "Percent" if filters["value"] == "Marge réelle" else "Float",
             "width": 120
         })
         columns.append({
@@ -50,9 +50,9 @@ def get_columns(filters):
         })
 
     columns.append({
-        "label": _("Total"),
+        "label": _("Total") if filters["value"] == "Marge réelle" else _("Total (pp)"),
         "fieldname": "total",
-        "fieldtype": "Percent",
+        "fieldtype": "Percent" if filters["value"] == "Marge réelle" else "Float",
         "width": 120
     })
     columns.append({
@@ -131,7 +131,8 @@ def get_data(filters):
             p.total_costing_amount,
             p.total_purchase_cost,
             p.total_consumed_material_cost,
-            p.total_expense_claim
+            p.total_expense_claim,
+            (SELECT COALESCE(SUM(f.manufacturing_costs), 0) FROM `tabFabrication VT` f WHERE f.project = p.name) AS total_manufacturing_cost
         FROM `tabProject` p
         WHERE {conditions}
     """.format(conditions=" AND ".join(conditions)), params, as_dict=1)
@@ -180,7 +181,6 @@ def get_data(filters):
 
     periods = get_periods(filters)
     data = []
-    print("Periods:", aggregated.keys())
     fieldname = get_fieldname(grouped_by)
 		
     for group in sorted(aggregated.keys()):
@@ -308,35 +308,37 @@ def get_fieldname(grouped_by):
         return "cost_center"
 
 def get_real_vente_cost(analysis_axis, project):
+    theo_vente_tp, theo_cost_tp = get_theoretical(project["project"], "Temps passé")
+    theo_vente_ach, theo_cost_ach= get_theoretical(project["project"], "Achats")
     if analysis_axis == "Marge globale":
-        vente = (project["total_sales_amount"] or 0) + (project["total_billable_amount"] or 0)
-        cost = (project["total_costing_amount"] or 0) + (project["total_purchase_cost"] or 0) + (project["total_consumed_material_cost"] or 0) + (project["total_expense_claim"] or 0)
+        vente = theo_vente_ach + theo_vente_tp
+        cost = (project["total_costing_amount"] or 0) + (project["total_purchase_cost"] or 0) + (project["total_consumed_material_cost"] or 0) + (project["total_expense_claim"] or 0) + (project["total_manufacturing_cost"] or 0)
     elif analysis_axis == "Temps passé":
-        vente = project["total_billable_amount"] or 0
+        vente = theo_vente_tp
         cost = project["total_costing_amount"] or 0
     elif analysis_axis == "Achats":
-        vente = project["total_sales_amount"] or 0
-        cost = (project["total_purchase_cost"] or 0) + (project["total_expense_claim"] or 0) + (project["total_consumed_material_cost"] or 0)
+        vente = theo_vente_tp + theo_vente_ach
+        cost = (project["total_purchase_cost"] or 0) + (project["total_expense_claim"] or 0) + (project["total_consumed_material_cost"] or 0) + (project["total_manufacturing_cost"] or 0)
     return vente, cost
 
 def get_theoretical(project, analysis_axis):
     item_group_condition = ""
     params = {"project": project}
     if analysis_axis == "Temps passé":
-        item_group_condition = "AND i.item_group = 'Main d''oeuvre'"
+        item_group_condition = "AND i.custom_pose_vt = 1"
     elif analysis_axis == "Achats":
-        item_group_condition = "AND i.item_group != 'Main d''oeuvre'"
-
+        item_group_condition = "AND NOT i.custom_pose_vt = 1"
+		
     result = frappe.db.sql("""
         SELECT 
-            SUM(soi.base_net_amount) AS vente,
-            SUM(soi.qty * COALESCE(i.valuation_rate, 0)) AS cost
+            SUM(soi.amount) AS vente,
+            SUM(soi.qty * COALESCE(soi.base_unit_cost_price, 0)) AS cost
         FROM `tabSales Order Item` soi
         INNER JOIN `tabSales Order` so ON so.name = soi.parent
         INNER JOIN `tabItem` i ON i.name = soi.item_code
         WHERE so.project = %(project)s AND so.docstatus = 1 {item_group_condition}
     """.format(item_group_condition=item_group_condition), params, as_dict=1)
-
+    
     if result and result[0]["vente"] is not None:
         return result[0]["vente"], result[0]["cost"]
     return 0, 0
