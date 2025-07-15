@@ -18,12 +18,12 @@ def execute(filters=None):
 
 def get_columns(filters):
     grouped_by = filters.get("grouped_by")
-    fieldname = grouped_by.lower().replace(" ", "_")  # e.g., "centre_de_coût" -> "centre_de_cout", but since French, adjust
+    fieldname = grouped_by.lower().replace(" ", "_")
     if grouped_by == "Project":
         fieldname = "project"
     elif grouped_by == "Company":
         fieldname = "company"
-    elif grouped_by == "cost_center":
+    elif grouped_by == "Cost Center":
         fieldname = "cost_center"
 
     columns = [{
@@ -161,8 +161,28 @@ def get_data(filters):
         period_key = get_period_key(project.expected_end_date, range_type)
         group_value = get_group_value(grouped_by, project)
 
-        real_vente, real_cost = get_real_vente_cost(analysis_axis, project)
-        theo_vente, theo_cost = get_theoretical(project.project, analysis_axis)
+        # Compute theoretical values once for both axes
+        theo_vente_tp, theo_cost_tp = get_theoretical(project.project, "Temps passé")
+        theo_vente_ach, theo_cost_ach = get_theoretical(project.project, "Achats")
+
+        # Determine real_vente and real_cost based on analysis_axis
+        if analysis_axis == "Marge globale":
+            real_vente = theo_vente_tp + theo_vente_ach
+            real_cost = (project["total_costing_amount"] or 0) + (project["total_purchase_cost"] or 0) + (project["total_consumed_material_cost"] or 0) + (project["total_expense_claim"] or 0) + (project["total_manufacturing_cost"] or 0)
+            theo_vente = real_vente
+            theo_cost = theo_cost_tp + theo_cost_ach
+        elif analysis_axis == "Temps passé":
+            real_vente = theo_vente_tp
+            real_cost = project["total_costing_amount"] or 0
+            theo_vente = theo_vente_tp
+            theo_cost = theo_cost_tp
+        elif analysis_axis == "Achats":
+            real_vente = theo_vente_tp + theo_vente_ach
+            real_cost = (project["total_purchase_cost"] or 0) + (project["total_expense_claim"] or 0) + (project["total_consumed_material_cost"] or 0) + (project["total_manufacturing_cost"] or 0)
+            theo_vente = theo_vente_ach
+            theo_cost = theo_cost_ach
+        else:
+            continue  # Invalid axis, skip
 
         aggregated[group_value][period_key]['real_vente'] += real_vente
         aggregated[group_value][period_key]['real_cost'] += real_cost
@@ -306,20 +326,6 @@ def get_fieldname(grouped_by):
         return "company"
     elif grouped_by == "Cost Center":
         return "cost_center"
-
-def get_real_vente_cost(analysis_axis, project):
-    theo_vente_tp, theo_cost_tp = get_theoretical(project["project"], "Temps passé")
-    theo_vente_ach, theo_cost_ach= get_theoretical(project["project"], "Achats")
-    if analysis_axis == "Marge globale":
-        vente = theo_vente_ach + theo_vente_tp
-        cost = (project["total_costing_amount"] or 0) + (project["total_purchase_cost"] or 0) + (project["total_consumed_material_cost"] or 0) + (project["total_expense_claim"] or 0) + (project["total_manufacturing_cost"] or 0)
-    elif analysis_axis == "Temps passé":
-        vente = theo_vente_tp
-        cost = project["total_costing_amount"] or 0
-    elif analysis_axis == "Achats":
-        vente = theo_vente_tp + theo_vente_ach
-        cost = (project["total_purchase_cost"] or 0) + (project["total_expense_claim"] or 0) + (project["total_consumed_material_cost"] or 0) + (project["total_manufacturing_cost"] or 0)
-    return vente, cost
 
 def get_theoretical(project, analysis_axis):
     item_group_condition = ""
