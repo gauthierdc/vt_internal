@@ -4,11 +4,11 @@ frappe.query_reports["VT Margin Report"] = {
             "fieldname": "grouped_by",
             "label": __("Groupé par"),
             "fieldtype": "Select",
-            "options": ["Project", "Company", "Cost Center"],
+            "options": ["Project", "Company", "Cost Center", "Assurance", "Type de projet", "Secteur VT"],
             "default": "Project",
             "reqd": 1  // Rendre obligatoire si nécessaire
         },
-				{
+        {
             "fieldname": "analysis_axis",
             "label": __("Axe d'analyse"),
             "fieldtype": "Select",
@@ -36,6 +36,27 @@ frappe.query_reports["VT Margin Report"] = {
             "options": "Cost Center"
         },
         {
+            "fieldname": "insurance",
+            "label": __("Assurance"),
+            "fieldtype": "Link",
+            "options": "Customer",
+            "filters": {
+                "customer_group": "Assurance"
+            }
+        },
+        {
+            "fieldname": "project_type",
+            "label": __("Type de projet"),
+            "fieldtype": "Link",
+            "options": "Project Type"
+        },
+        {
+            "fieldname": "secteur_vt",
+            "label": __("Secteur VT"),
+            "fieldtype": "Link",
+            "options": "Secteur VT"
+        },
+        {
             "fieldname": "quotation_owner",
             "label": __("Responsable du devis"),
             "fieldtype": "Link",
@@ -55,14 +76,14 @@ frappe.query_reports["VT Margin Report"] = {
             "default": frappe.datetime.get_today(),  // Par défaut : aujourd'hui
             "reqd": 1
         },
-				{
+        {
             "fieldname": "range",
             "label": __("Plage"),
             "fieldtype": "Select",
             "options": ["Mensuel", "Trimestriel", "Annuel"],
             "default": "Mensuel"
         },
-				{
+        {
             "fieldname": "value",
             "label": __("Valeur"),
             "fieldtype": "Select",

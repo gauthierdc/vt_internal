@@ -18,19 +18,14 @@ def execute(filters=None):
 
 def get_columns(filters):
     grouped_by = filters.get("grouped_by")
-    fieldname = grouped_by.lower().replace(" ", "_")
-    if grouped_by == "Project":
-        fieldname = "project"
-    elif grouped_by == "Company":
-        fieldname = "company"
-    elif grouped_by == "Cost Center":
-        fieldname = "cost_center"
+    fieldname = get_fieldname(grouped_by)
+    options = get_options(grouped_by)
 
     columns = [{
         "label": _(grouped_by),
         "fieldname": fieldname,
         "fieldtype": "Link",
-        "options": grouped_by,
+        "options": options,
         "width": 200
     }]
 
@@ -131,6 +126,9 @@ def get_data(filters):
             p.total_costing_amount,
             p.total_consumed_material_cost,
             p.total_expense_claim,
+            p.insurance,
+            p.project_type,
+            p.secteur_vt,
             (SELECT COALESCE(SUM(f.manufacturing_costs), 0) FROM `tabFabrication VT` f WHERE f.project = p.name) AS total_manufacturing_cost,
             (SELECT COALESCE(SUM(poi.amount), 0) FROM `tabPurchase Order Item` poi INNER JOIN `tabPurchase Order` po ON po.name = poi.parent WHERE poi.project = p.name AND po.docstatus < 2) AS total_purchase_order
         FROM `tabProject` p
@@ -242,7 +240,7 @@ def get_data(filters):
 
     # Grand Total row
     if data:
-        total_row = {fieldname: _("Grand Total")}
+        total_row = {fieldname: "Total"}
         grand_total_real_m = (grand_real_vente - grand_real_cost) / grand_real_vente * 100 if grand_real_vente > 0 else 0
         grand_total_theo_m = (grand_theo_vente - grand_theo_cost) / grand_theo_vente * 100 if grand_theo_vente > 0 else 0
         total_row["total"] = grand_total_real_m if value_type == "Marge réelle" else grand_total_real_m - grand_total_theo_m
@@ -299,6 +297,18 @@ def get_conditions(filters):
         conditions.append("p.custom_project_manager = %(quotation_owner)s")
         params["quotation_owner"] = filters["quotation_owner"]
 
+    if filters.get("insurance"):
+        conditions.append("p.insurance = %(insurance)s")
+        params["insurance"] = filters["insurance"]
+
+    if filters.get("project_type"):
+        conditions.append("p.project_type = %(project_type)s")
+        params["project_type"] = filters["project_type"]
+
+    if filters.get("secteur_vt"):
+        conditions.append("p.secteur_vt = %(secteur_vt)s")
+        params["secteur_vt"] = filters["secteur_vt"]
+
     return conditions, params
 
 def get_period_key(end_date, range_type):
@@ -318,6 +328,12 @@ def get_group_value(grouped_by, project):
         return project["company"]
     elif grouped_by == "Cost Center":
         return project["cost_center"] or ""
+    elif grouped_by == "Assurance":
+        return project["insurance"] or ""
+    elif grouped_by == "Type de projet":
+        return project["project_type"] or ""
+    elif grouped_by == "Secteur VT":
+        return project["secteur_vt"] or ""
 
 def get_fieldname(grouped_by):
     if grouped_by == "Project":
@@ -326,6 +342,26 @@ def get_fieldname(grouped_by):
         return "company"
     elif grouped_by == "Cost Center":
         return "cost_center"
+    elif grouped_by == "Assurance":
+        return "insurance"
+    elif grouped_by == "Type de projet":
+        return "project_type"
+    elif grouped_by == "Secteur VT":
+        return "secteur_vt"
+
+def get_options(grouped_by):
+    if grouped_by == "Project":
+        return "Project"
+    elif grouped_by == "Company":
+        return "Company"
+    elif grouped_by == "Cost Center":
+        return "Cost Center"
+    elif grouped_by == "Assurance":
+        return "Customer"
+    elif grouped_by == "Type de projet":
+        return "Project Type"
+    elif grouped_by == "Secteur VT":
+        return "Secteur VT"
 
 def get_theoretical(project, analysis_axis):
     item_group_condition = ""
