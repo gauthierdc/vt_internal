@@ -129,10 +129,10 @@ def get_data(filters):
             p.total_sales_amount,
             p.total_billable_amount,
             p.total_costing_amount,
-            p.total_purchase_cost,
             p.total_consumed_material_cost,
             p.total_expense_claim,
-            (SELECT COALESCE(SUM(f.manufacturing_costs), 0) FROM `tabFabrication VT` f WHERE f.project = p.name) AS total_manufacturing_cost
+            (SELECT COALESCE(SUM(f.manufacturing_costs), 0) FROM `tabFabrication VT` f WHERE f.project = p.name) AS total_manufacturing_cost,
+            (SELECT COALESCE(SUM(poi.amount), 0) FROM `tabPurchase Order Item` poi INNER JOIN `tabPurchase Order` po ON po.name = poi.parent WHERE poi.project = p.name AND po.docstatus < 2) AS total_purchase_order
         FROM `tabProject` p
         WHERE {conditions}
     """.format(conditions=" AND ".join(conditions)), params, as_dict=1)
@@ -168,7 +168,7 @@ def get_data(filters):
         # Determine real_vente and real_cost based on analysis_axis
         if analysis_axis == "Marge globale":
             real_vente = theo_vente_tp + theo_vente_ach
-            real_cost = (project["total_costing_amount"] or 0) + (project["total_purchase_cost"] or 0) + (project["total_consumed_material_cost"] or 0) + (project["total_expense_claim"] or 0) + (project["total_manufacturing_cost"] or 0)
+            real_cost = (project["total_costing_amount"] or 0) + (project["total_purchase_order"] or 0) + (project["total_consumed_material_cost"] or 0) + (project["total_expense_claim"] or 0) + (project["total_manufacturing_cost"] or 0)
             theo_vente = real_vente
             theo_cost = theo_cost_tp + theo_cost_ach
         elif analysis_axis == "Temps passé":
@@ -178,7 +178,7 @@ def get_data(filters):
             theo_cost = theo_cost_tp
         elif analysis_axis == "Achats":
             real_vente = theo_vente_tp + theo_vente_ach
-            real_cost = (project["total_purchase_cost"] or 0) + (project["total_expense_claim"] or 0) + (project["total_consumed_material_cost"] or 0) + (project["total_manufacturing_cost"] or 0)
+            real_cost = (project["total_purchase_order"] or 0) + (project["total_expense_claim"] or 0) + (project["total_consumed_material_cost"] or 0) + (project["total_manufacturing_cost"] or 0)
             theo_vente = theo_vente_ach
             theo_cost = theo_cost_ach
         else:
