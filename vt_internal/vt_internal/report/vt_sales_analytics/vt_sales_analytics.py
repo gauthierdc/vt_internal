@@ -54,7 +54,7 @@ class Analytics(object):
 			]
 		else:
 			match self.filters.tree_type:
-				case "Order Type":
+				case "Order Type" | "Origine" | "Assurance":
 					options, fieldtype  = "", "Data"
 				case "Par verre":
 					options, fieldtype  = "Item", "Link"
@@ -66,7 +66,7 @@ class Analytics(object):
 					"options": options,
 					"fieldname": "entity",
 					"fieldtype": fieldtype,
-					"width": 140 if self.filters.tree_type != "Order Type" else 200,
+					"width": 200 if self.filters.tree_type in ["Order Type", "Origine", "Assurance"] else 140,
 				}
 			]
 		if self.filters.tree_type in ["Customer", "Supplier", "Item"]:
@@ -120,6 +120,12 @@ class Analytics(object):
 		elif self.filters.tree_type == "Order Type":
 			self.get_sales_transactions_based_on_order_type()
 			self.get_rows_by_group()
+		elif self.filters.tree_type == "Origine":
+			self.get_sales_transactions_based_on_origine()
+			self.get_rows()
+		elif self.filters.tree_type == "Assurance":
+			self.get_sales_transactions_based_on_assurance()
+			self.get_rows()
 		elif self.filters.tree_type == "Project":
 			self.get_sales_transactions_based_on_project()
 			self.get_rows()
@@ -142,6 +148,8 @@ class Analytics(object):
 			filters["secteur_vt"] = self.filters.secteur
 		if self.filters.get("cost_center"):
 			filters["cost_center"] = self.filters.cost_center
+		if self.filters.get("insurance"):
+			filters["custom_insurance_client"] = self.filters.insurance
 
 		self.entries = frappe.get_all(
 			self.filters.doc_type,
@@ -168,6 +176,7 @@ class Analytics(object):
 
 		secteur_filter = ""
 		cost_center_filter = ""
+		insurance_filter = ""
 		params = [self.filters.company, self.filters.from_date, self.filters.to_date]
 		if self.filters.get("secteur"):
 			secteur_filter = " and s.secteur_vt = %s"
@@ -175,19 +184,91 @@ class Analytics(object):
 		if self.filters.get("cost_center"):
 			cost_center_filter = " and s.cost_center = %s"
 			params.append(self.filters.cost_center)
+		if self.filters.get("insurance"):
+			insurance_filter = " and s.custom_insurance_client = %s"
+			params.append(self.filters.insurance)
 
 		self.entries = frappe.db.sql(
 			""" select s.order_type as entity, s.{value_field} as value_field, s.{date_field}
 			from `tabSales Order` s where s.docstatus = 1 and s.company = %s and s.{date_field} between %s and %s
-			and ifnull(s.order_type, '') != ''{secteur_filter}{cost_center_filter} order by s.order_type
+			and ifnull(s.order_type, '') != ''{secteur_filter}{cost_center_filter}{insurance_filter} order by s.order_type
 		""".format(
-				date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter
+				date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter, insurance_filter=insurance_filter
 			),
 			tuple(params),
 			as_dict=1,
 		)
 
 		self.get_teams()
+
+	def get_sales_transactions_based_on_origine(self):
+		if self.filters["value_quantity"] == "Value":
+			value_field = "SUM(i.base_net_amount)"
+		else:
+			value_field = "COUNT(DISTINCT s.name)"
+
+		secteur_filter = ""
+		cost_center_filter = ""
+		insurance_filter = ""
+		params = [self.filters.company, self.filters.from_date, self.filters.to_date]
+		if self.filters.get("secteur"):
+			secteur_filter = " and s.secteur_vt = %s"
+			params.append(self.filters.secteur)
+		if self.filters.get("cost_center"):
+			cost_center_filter = " and s.cost_center = %s"
+			params.append(self.filters.cost_center)
+		if self.filters.get("insurance"):
+			insurance_filter = " and s.custom_insurance_client = %s"
+			params.append(self.filters.insurance)
+
+		self.entries = frappe.db.sql(
+			"""
+			select 
+				case when i.prevdoc_docname is not null then 'Devis' else 'Commande' end as entity,
+				{value_field} as value_field, 
+				s.{date_field}
+			from `tabSales Order Item` i , `tabSales Order` s
+			where s.name = i.parent and s.docstatus = 1 and s.company = %s
+			and s.{date_field} between %s and %s{secteur_filter}{cost_center_filter}{insurance_filter}
+			group by entity, s.{date_field}
+		""".format(
+				date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter, insurance_filter=insurance_filter
+			),
+			tuple(params),
+			as_dict=1,
+		)
+
+	def get_sales_transactions_based_on_assurance(self):
+		if self.filters["value_quantity"] == "Value":
+			value_field = "SUM(s.base_net_total)"
+		else:
+			value_field = "COUNT(DISTINCT s.name)"
+
+		secteur_filter = ""
+		cost_center_filter = ""
+		insurance_filter = ""
+		params = [self.filters.company, self.filters.from_date, self.filters.to_date]
+		if self.filters.get("secteur"):
+			secteur_filter = " and s.secteur_vt = %s"
+			params.append(self.filters.secteur)
+		if self.filters.get("cost_center"):
+			cost_center_filter = " and s.cost_center = %s"
+			params.append(self.filters.cost_center)
+		if self.filters.get("insurance"):
+			insurance_filter = " and s.custom_insurance_client = %s"
+			params.append(self.filters.insurance)
+
+		self.entries = frappe.db.sql(
+			""" select s.custom_insurance_client as entity, {value_field} as value_field, s.{date_field}
+			from `tabSales Order` s where s.docstatus = 1 and s.company = %s and s.{date_field} between %s and %s
+			{secteur_filter}{cost_center_filter}{insurance_filter}
+			group by entity, s.{date_field}
+		""".format(
+				date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter, insurance_filter=insurance_filter
+			),
+			tuple(params),
+			as_dict=1,
+		)
 
 	def get_sales_transactions_based_on_customers_or_suppliers(self):
 		if self.filters["value_quantity"] == "Value":
@@ -211,6 +292,8 @@ class Analytics(object):
 			filters["secteur_vt"] = self.filters.secteur
 		if self.filters.get("cost_center"):
 			filters["cost_center"] = self.filters.cost_center
+		if self.filters.get("insurance"):
+			filters["custom_insurance_client"] = self.filters.insurance
 
 		self.entries = frappe.get_all(
 			"Sales Order",
@@ -231,6 +314,7 @@ class Analytics(object):
 
 		secteur_filter = ""
 		cost_center_filter = ""
+		insurance_filter = ""
 		params = [self.filters.company, self.filters.from_date, self.filters.to_date]
 		if self.filters.get("secteur"):
 			secteur_filter = " and s.secteur_vt = %s"
@@ -238,15 +322,18 @@ class Analytics(object):
 		if self.filters.get("cost_center"):
 			cost_center_filter = " and s.cost_center = %s"
 			params.append(self.filters.cost_center)
+		if self.filters.get("insurance"):
+			insurance_filter = " and s.custom_insurance_client = %s"
+			params.append(self.filters.insurance)
 
 		self.entries = frappe.db.sql(
 			"""
 			select i.item_code as entity, i.item_name as entity_name, i.stock_uom, i.{value_field} as value_field, s.{date_field}
 			from `tabSales Order Item` i , `tabSales Order` s
 			where s.name = i.parent and i.docstatus = 1 and s.company = %s
-			and s.{date_field} between %s and %s{secteur_filter}{cost_center_filter}
+			and s.{date_field} between %s and %s{secteur_filter}{cost_center_filter}{insurance_filter}
 		""".format(
-				date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter
+				date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter, insurance_filter=insurance_filter
 			),
 			tuple(params),
 			as_dict=1,
@@ -279,6 +366,8 @@ class Analytics(object):
 			filters["secteur_vt"] = self.filters.secteur
 		if self.filters.get("cost_center"):
 			filters["cost_center"] = self.filters.cost_center
+		if self.filters.get("insurance"):
+			filters["custom_insurance_client"] = self.filters.insurance
 
 		self.entries = frappe.get_all(
 			"Sales Order",
@@ -295,6 +384,7 @@ class Analytics(object):
 
 		secteur_filter = ""
 		cost_center_filter = ""
+		insurance_filter = ""
 		params = [self.filters.company, self.filters.from_date, self.filters.to_date]
 		if self.filters.get("secteur"):
 			secteur_filter = " and s.secteur_vt = %s"
@@ -302,15 +392,18 @@ class Analytics(object):
 		if self.filters.get("cost_center"):
 			cost_center_filter = " and s.cost_center = %s"
 			params.append(self.filters.cost_center)
+		if self.filters.get("insurance"):
+			insurance_filter = " and s.custom_insurance_client = %s"
+			params.append(self.filters.insurance)
 
 		self.entries = frappe.db.sql(
 			"""
 			select i.item_group as entity, i.{value_field} as value_field, s.{date_field}
 			from `tabSales Order Item` i , `tabSales Order` s
 			where s.name = i.parent and i.docstatus = 1 and s.company = %s
-			and s.{date_field} between %s and %s{secteur_filter}{cost_center_filter}
+			and s.{date_field} between %s and %s{secteur_filter}{cost_center_filter}{insurance_filter}
 		""".format(
-				date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter
+				date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter, insurance_filter=insurance_filter
 			),
 			tuple(params),
 			as_dict=1,
@@ -336,6 +429,8 @@ class Analytics(object):
 			filters["secteur_vt"] = self.filters.secteur
 		if self.filters.get("cost_center"):
 			filters["cost_center"] = self.filters.cost_center
+		if self.filters.get("insurance"):
+			filters["custom_insurance_client"] = self.filters.insurance
 
 		self.entries = frappe.get_all(
 			"Sales Order",
@@ -467,8 +562,8 @@ class Analytics(object):
 		)
 
 		for d in self.group_entries:
-			if d.parent and (depth_map := self.depth_map.get(d.parent)):  # @dokos
-				self.depth_map.setdefault(d.name, depth_map + 1)  # @dokos
+			if d.parent:
+				self.depth_map.setdefault(d.name, self.depth_map.get(d.parent) + 1)
 			else:
 				self.depth_map.setdefault(d.name, 0)
 
@@ -486,8 +581,8 @@ class Analytics(object):
 		)
 
 		for d in self.group_entries:
-			if d.parent and (depth_map := self.depth_map.get(d.parent)):  # @dokos
-				self.depth_map.setdefault(d.name, depth_map + 1)  # @dokos
+			if d.parent:
+				self.depth_map.setdefault(d.name, self.depth_map.get(d.parent) + 1)
 			else:
 				self.depth_map.setdefault(d.name, 0)
 
@@ -557,6 +652,6 @@ class Analytics(object):
 			filters.append("so.cost_center = '{}'".format(self.filters.cost_center))
 		if self.filters.get("custom_responsable_du_devis"):
 			filters.append("so.custom_responsable_du_devis = '{}'".format(self.filters.custom_responsable_du_devis))
+		if self.filters.get("insurance"):
+			filters.append("so.custom_insurance_client = '{}'".format(self.filters.insurance))
 		return " AND " + " AND ".join(filters) if filters else ""
-
-

@@ -8,7 +8,7 @@ frappe.query_reports["VT Sales Analytics"] = {
 			fieldname: "tree_type",
 			label: __("Tree Type"),
 			fieldtype: "Select",
-			options: ["Customer Group", "Customer", "Secteur VT", "Item Group", "Item", "Territory", "Order Type", "Project", "Par verre"],
+			options: ["Customer Group", "Customer", "Secteur VT", "Item Group", "Item", "Territory", "Order Type", "Project", "Par verre", "Assurance", "Origine"],
 			default: "Customer",
 			reqd: 1,
 			on_change: function(report) {
@@ -74,6 +74,15 @@ frappe.query_reports["VT Sales Analytics"] = {
 			options: "Company",
 			default: frappe.defaults.get_user_default("Company"),
 			reqd: 1
+		},
+		{
+				"fieldname": "insurance",
+				"label": __("Assurance"),
+				"fieldtype": "Link",
+				"options": "Customer",
+				"filters": {
+						"customer_group": "Assurance"
+				}
 		},
 		{
 			fieldname: "range",
