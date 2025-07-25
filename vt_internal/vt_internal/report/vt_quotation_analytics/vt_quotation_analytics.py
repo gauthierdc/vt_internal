@@ -159,7 +159,7 @@ def get_data(filters):
             q.custom_dernier_statut_de_suivi,
             q.status
         FROM `tabQuotation` q
-        WHERE q.docstatus = 1 AND {conditions}
+        WHERE q.docstatus <> 2 AND {conditions}
     """.format(conditions=" AND ".join(conditions)), params, as_dict=1)
 
     grouped_by = filters.get("grouped_by")
@@ -203,7 +203,10 @@ def get_data(filters):
         group_value = get_group_value(grouped_by, quot)
 
         if grouped_by == "Devis":
-            group_info[group_value]["statut_de_suivi"] = quot["custom_dernier_statut_de_suivi"] or ""
+            if quot.status in ["Ordered", "Partially Ordered"]:
+                group_info[group_value]["statut_de_suivi"] = "Commmandé"
+            else:
+                group_info[group_value]["statut_de_suivi"] = quot["custom_dernier_statut_de_suivi"] or ""
 
         is_relance = quot.custom_dernier_statut_de_suivi is not None and quot.custom_dernier_statut_de_suivi != "Relance manuelle"
         is_conv = quot.status in ["Ordered", "Partially Ordered"]
@@ -388,8 +391,11 @@ def get_group_value(grouped_by, quot):
         return quot["type_de_projet"] or ""
     elif grouped_by == "Responsable du devis":
         return quot["responsable_du_devis"] or ""
-    elif grouped_by == "Statut du devis":
-        return quot["custom_dernier_statut_de_suivi"] or ""
+    elif grouped_by == "Statut de suivi":
+        if quot.status in ["Ordered", "Partially Ordered"]:
+            return "Commandé"
+        else:
+            return quot["custom_dernier_statut_de_suivi"] or ""
 
 def get_fieldname(grouped_by):
     if grouped_by == "Devis":
@@ -404,7 +410,7 @@ def get_fieldname(grouped_by):
         return "type_de_projet"
     elif grouped_by == "Responsable du devis":
         return "responsable_du_devis"
-    elif grouped_by == "Statut du devis":
+    elif grouped_by == "Statut de suivi":
         return "custom_dernier_statut_de_suivi"
 
 def get_options(grouped_by):
@@ -420,5 +426,5 @@ def get_options(grouped_by):
         return "Project Type"
     elif grouped_by == "Responsable du devis":
         return "User"
-    elif grouped_by == "Statut du devis":
+    elif grouped_by == "Statut de suivi":
         return ""

@@ -4,7 +4,7 @@ frappe.query_reports["VT Quotation Analytics"] = {
             "fieldname": "grouped_by",
             "label": __("Groupé par"),
             "fieldtype": "Select",
-            "options": ["Devis", "Secteur VT", "Assurance", "Centre de cout", "Type de projet", "Responsable du devis", "Statut du devis"],
+            "options": ["Devis", "Secteur VT", "Assurance", "Centre de cout", "Type de projet", "Responsable du devis", "Statut de suivi"],
             "default": "Secteur VT",
             "reqd": 1
         },
@@ -70,6 +70,6 @@ frappe.query_reports["VT Quotation Analytics"] = {
             "fieldtype": "Select",
             "options": ["Hebdomadaire", "Mensuel", "Trimestriel", "Annuel"],
             "default": "Mensuel"
-        }
+        },
     ]
 };
