@@ -32,9 +32,9 @@ def get_columns(filters):
     periods = get_periods(filters)
     for period in periods:
         columns.append({
-            "label": period["label"] if filters["value"] == "Marge réelle" else period["label"] + " (pp)",
+            "label": period["label"],
             "fieldname": period["key"],
-            "fieldtype": "Percent" if filters["value"] == "Marge réelle" else "Float",
+            "fieldtype": "Percent",
             "width": 120
         })
         columns.append({
@@ -43,16 +43,28 @@ def get_columns(filters):
             "fieldtype": "Currency",
             "width": 150
         })
+        columns.append({
+            "label": period["label"] + " diff théo",
+            "fieldname": period["key"] + "_diff",
+            "fieldtype": "Currency",
+            "width": 150
+        })
 
     columns.append({
-        "label": _("Total") if filters["value"] == "Marge réelle" else _("Total (pp)"),
+        "label": _("Total"),
         "fieldname": "total",
-        "fieldtype": "Percent" if filters["value"] == "Marge réelle" else "Float",
+        "fieldtype": "Percent",
         "width": 120
     })
     columns.append({
         "label": _("Total Montant"),
         "fieldname": "total_montant",
+        "fieldtype": "Currency",
+        "width": 150
+    })
+    columns.append({
+        "label": _("Total Diff Theo"),
+        "fieldname": "total_diff",
         "fieldtype": "Currency",
         "width": 150
     })
@@ -136,7 +148,6 @@ def get_data(filters):
     """.format(conditions=" AND ".join(conditions)), params, as_dict=1)
 
     analysis_axis = filters.get("analysis_axis")
-    value_type = filters.get("value")
     grouped_by = filters.get("grouped_by")
     range_type = filters.get("range", "Mensuel")
 
@@ -218,11 +229,13 @@ def get_data(filters):
 
                 real_m = (rv - rc) / rv * 100 if rv > 0 else 0
                 theo_m = (tv - tc) / tv * 100 if tv > 0 else 0
-                val = real_m if value_type == "Marge réelle" else real_m - theo_m
-                row[p_key] = val
+                row[p_key] = real_m
 
-                montant_val = (rv - rc) if value_type == "Marge réelle" else ((rv - rc) - (tv - tc))
+                montant_val = (rv - rc)
                 row[p_key + "_montant"] = montant_val
+
+                diff_val = montant_val - ((tv - tc))
+                row[p_key + "_diff"] = diff_val
 
                 group_total_real_vente += rv
                 group_total_real_cost += rc
@@ -231,20 +244,21 @@ def get_data(filters):
             else:
                 row[p_key] = 0
                 row[p_key + "_montant"] = 0
+                row[p_key + "_diff"] = 0
 
         group_total_real_m = (group_total_real_vente - group_total_real_cost) / group_total_real_vente * 100 if group_total_real_vente > 0 else 0
-        group_total_theo_m = (group_total_theo_vente - group_total_theo_cost) / group_total_theo_vente * 100 if group_total_theo_vente > 0 else 0
-        row["total"] = group_total_real_m if value_type == "Marge réelle" else group_total_real_m - group_total_theo_m
-        row["total_montant"] = (group_total_real_vente - group_total_real_cost) if value_type == "Marge réelle" else ((group_total_real_vente - group_total_real_cost) - (group_total_theo_vente - group_total_theo_cost))
+        row["total"] = group_total_real_m
+        row["total_montant"] = (group_total_real_vente - group_total_real_cost)
+        row["total_diff"] = row["total_montant"] - ((group_total_theo_vente - group_total_theo_cost))
         data.append(row)
 
     # Grand Total row
     if data:
         total_row = {fieldname: "Total"}
         grand_total_real_m = (grand_real_vente - grand_real_cost) / grand_real_vente * 100 if grand_real_vente > 0 else 0
-        grand_total_theo_m = (grand_theo_vente - grand_theo_cost) / grand_theo_vente * 100 if grand_theo_vente > 0 else 0
-        total_row["total"] = grand_total_real_m if value_type == "Marge réelle" else grand_total_real_m - grand_total_theo_m
-        total_row["total_montant"] = (grand_real_vente - grand_real_cost) if value_type == "Marge réelle" else ((grand_real_vente - grand_real_cost) - (grand_theo_vente - grand_theo_cost))
+        total_row["total"] = grand_total_real_m
+        total_row["total_montant"] = (grand_real_vente - grand_real_cost)
+        total_row["total_diff"] = total_row["total_montant"] - ((grand_theo_vente - grand_theo_cost))
 
         for period in periods:
             p_key = period["key"]
@@ -256,14 +270,17 @@ def get_data(filters):
 
                 real_m = (rv - rc) / rv * 100 if rv > 0 else 0
                 theo_m = (tv - tc) / tv * 100 if tv > 0 else 0
-                val = real_m if value_type == "Marge réelle" else real_m - theo_m
-                total_row[p_key] = val
+                total_row[p_key] = real_m
 
-                montant_val = (rv - rc) if value_type == "Marge réelle" else ((rv - rc) - (tv - tc))
+                montant_val = (rv - rc)
                 total_row[p_key + "_montant"] = montant_val
+
+                diff_val = montant_val - ((tv - tc))
+                total_row[p_key + "_diff"] = diff_val
             else:
                 total_row[p_key] = 0
                 total_row[p_key + "_montant"] = 0
+                total_row[p_key + "_diff"] = 0
 
         data.append(total_row)
 
