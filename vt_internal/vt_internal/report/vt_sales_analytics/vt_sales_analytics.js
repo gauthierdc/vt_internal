@@ -8,7 +8,7 @@ frappe.query_reports["VT Sales Analytics"] = {
 			fieldname: "tree_type",
 			label: __("Tree Type"),
 			fieldtype: "Select",
-			options: ["Customer Group", "Customer", "Secteur VT", "Item Group", "Item", "Territory", "Order Type", "Project", "Par verre", "Assurance", "Origine"],
+			options: ["Customer Group", "Customer", "Secteur VT", "Item Group", "Item", "Territory", "Order Type", "Project", "Par verre", "Assurance", "Origine", "Responsable du devis"],
 			default: "Customer",
 			reqd: 1,
 			on_change: function(report) {
@@ -114,8 +114,7 @@ frappe.query_reports["VT Sales Analytics"] = {
 						data[2].html
 					)[0].attributes.getNamedItem("data-doctype").value;
 					const tree_type = frappe.query_report.filters[0].value;
-					console.log(data_doctype, tree_type)
-					if (data_doctype != tree_type && tree_type != "Par verre") return;
+					if (data_doctype != tree_type && tree_type != "Par verre" && tree_type != "Responsable du devis") return;
 
 					const row_name = data[2].content;
 					const raw_data = frappe.query_report.chart.data;

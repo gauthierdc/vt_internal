@@ -242,7 +242,6 @@ def project_details():
     project_id = frappe.form_dict.get("project")
     project = frappe.get_doc("Project", project_id)
 
-    has_pose_vt = has_pose_vt_items(project_id)
 
     theo_vente_global, theo_cost_global = get_theoretical(project_id, "global")
     theo_vente_tp, theo_cost_tp = get_theoretical(project_id, "Temps passé")
@@ -301,6 +300,8 @@ def project_details():
     diff_global = real_margin - theoretical_margin
     diff_ach = real_margin_ach - theo_margin_ach
     diff_time = time_spent - labour_hours
+
+    has_pose_vt = labour_hours > 0 or time_spent > 0
 
     marges_table = f"""
     <table class="table mb-0">
