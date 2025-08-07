@@ -11,7 +11,7 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/vt_internal/css/vt_internal.css"
-# app_include_js = "/assets/vt_internal/js/vt_internal.js"
+app_include_js = "/assets/vt_internal/js/bundle_editor_patch.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/vt_internal/css/vt_internal.css"
