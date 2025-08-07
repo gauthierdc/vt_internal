@@ -19,7 +19,7 @@ def project_details():
             INNER JOIN `tabSales Order` so ON so.name = soi.parent
             INNER JOIN `tabItem` i ON i.name = soi.item_code
             WHERE so.project = %s AND so.docstatus = 1 {condition}
-            AND product_bundle_name IS NOT NULL
+            AND product_bundle_name IS NULL
         """.format(condition=condition)
         result_non_bundle = frappe.db.sql(sql_non_bundle, project_id, as_dict=1)[0]
         vente_non_bundle = result_non_bundle.vente or 0
