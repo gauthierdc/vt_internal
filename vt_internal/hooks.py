@@ -154,6 +154,15 @@ app_include_js = "/assets/vt_internal/js/bundle_editor_patch.js"
 # 	],
 # }
 
+scheduler_events = {
+	"cron": {
+			# Chaque vendredi à 19h
+			"0 19 * * 5": [
+					"vt_internal.vt_internal.weekly_hours_report.run_weekly_hours_report"
+			]
+	}
+}
+
 # Testing
 # -------
 
