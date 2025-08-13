@@ -1,0 +1,380 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:VT-{YY}{MM}-{###}",
+ "creation": "2024-05-23 11:45:06.760535",
+ "default_view": "List",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "informations_section",
+  "geolocation_xovj",
+  "column_break_wpqh",
+  "status",
+  "r\u00e9f\u00e9rence_pi\u00e8ce",
+  "starts_on",
+  "ends_on",
+  "completion_on",
+  "all_day",
+  "address",
+  "address_display",
+  "distance",
+  "description",
+  "column_break_vtni",
+  "projet",
+  "quotation",
+  "sales_order",
+  "client",
+  "contact",
+  "phone",
+  "email",
+  "op\u00e9rateur",
+  "company",
+  "ordering_party",
+  "ordering_party_notified",
+  "cost_center",
+  "section_break_woyn",
+  "plans",
+  "attestation_de_tva",
+  "column_break_lqms",
+  "photo_2",
+  "mandat_assurance",
+  "column_break_rtaa",
+  "photo_3",
+  "bon_pour_accord_assurance",
+  "column_break_vxcg",
+  "photo_4",
+  "column_break_ekbf",
+  "photo_5",
+  "section_break_puil",
+  "cotes",
+  "column_break_sxtj",
+  "risques",
+  "plus_dinformations_tab",
+  "letter_head"
+ ],
+ "fields": [
+  {
+   "fieldname": "informations_section",
+   "fieldtype": "Section Break",
+   "label": "Informations"
+  },
+  {
+   "fetch_from": "address.map_location",
+   "fieldname": "geolocation_xovj",
+   "fieldtype": "Geolocation"
+  },
+  {
+   "fieldname": "column_break_wpqh",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_in_quick_entry": 1,
+   "default": "\u00c0 faire",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "\u00c0 programmer\n\u00c0 faire\nFait\nAnnul\u00e9"
+  },
+  {
+   "fetch_from": "quotation.reference_piece",
+   "fetch_if_empty": 1,
+   "fieldname": "r\u00e9f\u00e9rence_pi\u00e8ce",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "R\u00e9f\u00e9rence pi\u00e8ce"
+  },
+  {
+   "allow_in_quick_entry": 1,
+   "default": "Today",
+   "fieldname": "starts_on",
+   "fieldtype": "Date",
+   "label": "Date"
+  },
+  {
+   "fieldname": "ends_on",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Ends on"
+  },
+  {
+   "fieldname": "completion_on",
+   "fieldtype": "Date",
+   "label": "Termin\u00e9 le",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "all_day",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "All day"
+  },
+  {
+   "allow_in_quick_entry": 1,
+   "fieldname": "address",
+   "fieldtype": "Link",
+   "label": "Address",
+   "options": "Address"
+  },
+  {
+   "fieldname": "address_display",
+   "fieldtype": "Small Text",
+   "label": "Address Display",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "address.custom_distance_m",
+   "fieldname": "distance",
+   "fieldtype": "Float",
+   "label": "Distance (Km)",
+   "read_only": 1
+  },
+  {
+   "allow_in_quick_entry": 1,
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "Description"
+  },
+  {
+   "fieldname": "column_break_vtni",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "projet",
+   "fieldtype": "Link",
+   "label": "Projet",
+   "options": "Project",
+   "search_index": 1
+  },
+  {
+   "allow_in_quick_entry": 1,
+   "depends_on": "eval:!doc.sales_order",
+   "fieldname": "quotation",
+   "fieldtype": "Link",
+   "label": "Quotation",
+   "options": "Quotation",
+   "search_index": 1
+  },
+  {
+   "fieldname": "client",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Client",
+   "options": "Customer"
+  },
+  {
+   "fetch_from": "quotation.contact_person",
+   "fetch_if_empty": 1,
+   "fieldname": "contact",
+   "fieldtype": "Link",
+   "label": "Contact",
+   "options": "Contact"
+  },
+  {
+   "fetch_from": "contact.mobile_no",
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "label": "T\u00e9l\u00e9phone",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "contact.email_id",
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "E-mail",
+   "read_only": 1
+  },
+  {
+   "allow_in_quick_entry": 1,
+   "fetch_from": "cost_center.default_technical_inspection_operator",
+   "fetch_if_empty": 1,
+   "fieldname": "op\u00e9rateur",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Op\u00e9rateur",
+   "link_filters": "[[\"Employee\",\"status\",\"=\",\"Active\"]]",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "default": "__user",
+   "fieldname": "ordering_party",
+   "fieldtype": "Link",
+   "label": "Donneur d'ordre",
+   "options": "User"
+  },
+  {
+   "default": "0",
+   "fieldname": "ordering_party_notified",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Ordering party notified"
+  },
+  {
+   "fetch_from": "quotation.cost_center",
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Centre de co\u00fbt",
+   "options": "Cost Center"
+  },
+  {
+   "fieldname": "section_break_woyn",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "plans",
+   "fieldtype": "Attach Image",
+   "label": "Photo principale"
+  },
+  {
+   "fieldname": "attestation_de_tva",
+   "fieldtype": "Attach Image",
+   "label": "Attestation de TVA"
+  },
+  {
+   "fieldname": "column_break_lqms",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "photo_2",
+   "fieldtype": "Attach Image",
+   "label": "Photo 2"
+  },
+  {
+   "fieldname": "mandat_assurance",
+   "fieldtype": "Attach Image",
+   "label": "Mandat assurance"
+  },
+  {
+   "fieldname": "column_break_rtaa",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "photo_3",
+   "fieldtype": "Attach Image",
+   "label": "Photo 3"
+  },
+  {
+   "fieldname": "bon_pour_accord_assurance",
+   "fieldtype": "Attach Image",
+   "label": "Bon pour accord assurance"
+  },
+  {
+   "fieldname": "column_break_vxcg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "photo_4",
+   "fieldtype": "Attach Image",
+   "label": "Photo 4"
+  },
+  {
+   "fieldname": "column_break_ekbf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "photo_5",
+   "fieldtype": "Attach Image",
+   "label": "Photo 5"
+  },
+  {
+   "fieldname": "section_break_puil",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "cotes",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Prise de c\u00f4tes"
+  },
+  {
+   "fieldname": "column_break_sxtj",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "contr\u00f4le de la faisabilit\u00e9 ( acc\u00e9s - applond des supports - contr\u00f4le des imp\u00e9ratifs du client- etc......)",
+   "fieldname": "risques",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Analyse des risques"
+  },
+  {
+   "fieldname": "plus_dinformations_tab",
+   "fieldtype": "Tab Break",
+   "label": "Plus d'informations"
+  },
+  {
+   "fetch_from": "company.default_letter_head",
+   "fieldname": "letter_head",
+   "fieldtype": "Link",
+   "label": "En t\u00eate",
+   "options": "Letter Head"
+  },
+  {
+   "depends_on": "eval:!doc.quotation",
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order"
+  }
+ ],
+ "image_field": "plans",
+ "index_web_pages_for_search": 1,
+ "is_calendar_and_gantt": 1,
+ "links": [
+  {
+   "link_doctype": "Event",
+   "link_fieldname": "custom_visite_technique"
+  }
+ ],
+ "modified": "2025-08-13 17:21:54.754042",
+ "modified_by": "Administrator",
+ "module": "VT internal",
+ "name": "Visite Technique",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [
+  {
+   "color": "Red",
+   "title": "\u00c0 programmer"
+  },
+  {
+   "color": "Blue",
+   "title": "\u00c0 faire"
+  },
+  {
+   "color": "Green",
+   "title": "Fait"
+  }
+ ],
+ "title_field": "client",
+ "track_changes": 1
+}
