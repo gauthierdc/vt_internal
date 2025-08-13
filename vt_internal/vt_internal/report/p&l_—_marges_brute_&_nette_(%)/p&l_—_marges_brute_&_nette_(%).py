@@ -368,7 +368,7 @@ def execute(filters=None):
 	net_margin_pct_r = round(net_margin_pct, 1)
 
 	report_summary = [
-		{"label": _("Revenu brute"), "value": gross_income_total_r, "indicator": "Blue", "datatype": "Currency"},
+		{"label": _("Marge brute"), "value": gross_income_total_r, "indicator": "Blue", "datatype": "Currency"},
 		{"label": _("Marge brute %"), "value": gross_margin_pct_r, "datatype": "Percent", "indicator": "Green" if gross_margin_pct_r >= 0 else "Red"},
 		{"label": _("Marge nette"), "value": net_profit_total_r, "datatype": "Currency", "indicator": "Green" if net_profit_total_r >= 0 else "Red"},
 		{"label": _("Marge nette %"), "value": net_margin_pct_r, "datatype": "Percent", "indicator": "Green" if net_margin_pct_r >= 0 else "Red"},
