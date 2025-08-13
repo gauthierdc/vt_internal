@@ -81,7 +81,7 @@ frappe.ui.form.on('Visite Technique', {
             	});
             	
             	frappe.call({
-                    method: "project_details",
+                    method: "vt_internal.vt_internal.api.project_details.project_details",
                     args: {project: frm.doc.projet}
                 }).then((r) => dialog.fields_dict.content.$wrapper.html(r.message.html))
                 dialog.show()
