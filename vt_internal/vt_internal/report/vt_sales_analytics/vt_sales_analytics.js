@@ -1,34 +1,66 @@
 // Copyright (c) 2016, Frappe Technologies Pvt. Ltd. and contributors
 // For license information, please see license.txt
 
-
 frappe.query_reports["VT Sales Analytics"] = {
+	onload: function(report) {
+		// état initial : ajuster l'affichage de Range / Column Limit
+		const column_by = report.get_filter("column_by").get_value();
+		toggle_period_vs_dimension_ui(report, column_by);
+	},
+
 	"filters": [
 		{
 			fieldname: "tree_type",
 			label: __("Tree Type"),
 			fieldtype: "Select",
-			options: ["Customer Group", "Customer", "Secteur VT", "Item Group", "Item", "Territory", "Order Type", "Project", "Par verre", "Assurance", "Origine", "Responsable du devis"],
+			options: [
+				"Customer Group", "Customer", "Secteur VT", "Item Group", "Item",
+				"Territory", "Order Type", "Project", "Par verre", "Assurance",
+				"Origine", "Responsable du devis"
+			],
 			default: "Customer",
 			reqd: 1,
 			on_change: function(report) {
-				var tree_type = this.value;
-				var vq_filter = report.get_filter("value_quantity");
+				const tree_type = this.value;
+				const vq_filter = report.get_filter("value_quantity");
+
+				// Bascule "m²" pour Par verre
 				if (tree_type === "Par verre") {
 					vq_filter.df.options = [
-						{ "value": "Value", "label": __("Value") },
-						{ "value": "Quantity", "label": "m²" },
+						{ value: "Value", label: __("Value") },
+						{ value: "Quantity", label: "m²" },
 					];
 				} else {
 					vq_filter.df.options = [
-						{ "value": "Value", "label": __("Value") },
-						{ "value": "Quantity", "label": __("Quantity") },
+						{ value: "Value", label: __("Value") },
+						{ value: "Quantity", label: __("Quantity") },
 					];
 				}
 				vq_filter.refresh();
 				vq_filter.set_input(vq_filter.value);
-				report.refresh(); // Ajout : recharge le rapport quand tree_type change
+
+				report.refresh();
 			}
+		},
+		{
+			fieldname: "column_by",
+			label: __("Colonnes par"),
+			fieldtype: "Select",
+			options: ["Période", "Secteur VT", "Assurance", "Responsable du devis"],
+			default: "Période",
+			reqd: 1,
+			on_change: function(report) {
+				const column_by = this.get_value();
+				toggle_period_vs_dimension_ui(report, column_by);
+				report.refresh();
+			}
+		},
+		{
+			fieldname: "column_limit",
+			label: __("Limiter à (Top-N colonnes)"),
+			fieldtype: "Int",
+			default: 0, // 0 = illimité
+			description: __("Utilisé uniquement si 'Colonnes par' ≠ Période")
 		},
 		{
 			fieldname: "secteur",
@@ -47,8 +79,8 @@ frappe.query_reports["VT Sales Analytics"] = {
 			label: __("Value Or Qty"),
 			fieldtype: "Select",
 			options: [
-				{ "value": "Value", "label": __("Value") },
-				{ "value": "Quantity", "label": __("Quantity") },
+				{ value: "Value", label: __("Value") },
+				{ value: "Quantity", label: __("Quantity") },
 			],
 			default: "Value",
 			reqd: 1
@@ -76,23 +108,21 @@ frappe.query_reports["VT Sales Analytics"] = {
 			reqd: 1
 		},
 		{
-				"fieldname": "insurance",
-				"label": __("Assurance"),
-				"fieldtype": "Link",
-				"options": "Customer",
-				"filters": {
-						"customer_group": "Assurance"
-				}
+			fieldname: "insurance",
+			label: __("Assurance"),
+			fieldtype: "Link",
+			options: "Customer",
+			filters: { "customer_group": "Assurance" }
 		},
 		{
 			fieldname: "range",
 			label: __("Range"),
 			fieldtype: "Select",
 			options: [
-				{ "value": "Weekly", "label": __("Weekly") },
-				{ "value": "Monthly", "label": __("Monthly") },
-				{ "value": "Quarterly", "label": __("Quarterly") },
-				{ "value": "Yearly", "label": __("Yearly") }
+				{ value: "Weekly", label: __("Weekly") },
+				{ value: "Monthly", label: __("Monthly") },
+				{ value: "Quarterly", label: __("Quarterly") },
+				{ value: "Yearly", label: __("Yearly") }
 			],
 			default: "Monthly",
 			reqd: 1
@@ -104,38 +134,33 @@ frappe.query_reports["VT Sales Analytics"] = {
 			options: "User"
 		}
 	],
+
 	get_datatable_options(options) {
 		return Object.assign(options, {
 			checkboxColumn: true,
 			events: {
 				onCheckRow: function (data) {
 					if (!data) return;
-					const data_doctype = $(
-						data[2].html
-					)[0].attributes.getNamedItem("data-doctype").value;
+					const data_doctype = $(data[2].html)[0].attributes.getNamedItem("data-doctype").value;
 					const tree_type = frappe.query_report.filters[0].value;
 					if (data_doctype != tree_type && tree_type != "Par verre" && tree_type != "Responsable du devis") return;
 
 					const row_name = data[2].content;
 					const raw_data = frappe.query_report.chart.data;
 					const new_datasets = raw_data.datasets;
-					const element_found = new_datasets.some(
-						(element, index, array) => {
-							if (element.name == row_name) {
-								array.splice(index, 1);
-								return true;
-							}
-							return false;
+					const element_found = new_datasets.some((element, index, array) => {
+						if (element.name == row_name) {
+							array.splice(index, 1);
+							return true;
 						}
-					);
+						return false;
+					});
 					const slice_at = { Customer: 4, Item: 5 }[tree_type] || 3;
 
 					if (!element_found) {
 						new_datasets.push({
 							name: row_name,
-							values: data
-								.slice(slice_at, data.length - 1)
-								.map(column => column.content),
+							values: data.slice(slice_at, data.length - 1).map(column => column.content),
 						});
 					}
 
@@ -143,7 +168,7 @@ frappe.query_reports["VT Sales Analytics"] = {
 						labels: raw_data.labels,
 						datasets: new_datasets,
 					};
-					const new_options = Object.assign({}, frappe.query_report.chart_options, {data: new_data});
+					const new_options = Object.assign({}, frappe.query_report.chart_options, { data: new_data });
 					frappe.query_report.render_chart(new_options);
 
 					frappe.query_report.raw_chart_data = new_data;
@@ -152,3 +177,20 @@ frappe.query_reports["VT Sales Analytics"] = {
 		});
 	},
 };
+
+// -------- Helpers UI --------
+
+function toggle_period_vs_dimension_ui(report, column_by) {
+	const range = report.get_filter("range");
+	const col_limit = report.get_filter("column_limit");
+
+	// Range visible uniquement si on a les périodes en colonnes
+	const show_range = (column_by === "Période");
+	range.df.hidden = !show_range;
+	range.refresh && range.refresh();
+
+	// Column limit pertinent uniquement si colonnes ≠ périodes
+	const show_limit = (column_by !== "Période");
+	col_limit.df.hidden = !show_limit;
+	col_limit.refresh && col_limit.refresh();
+}

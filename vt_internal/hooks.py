@@ -11,7 +11,7 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/vt_internal/css/vt_internal.css"
-app_include_js = "/assets/vt_internal/js/bundle_editor_patch.js"
+app_include_js = ["/assets/vt_internal/js/bundle_editor_patch.js", "/assets/vt_internal/js/logrocket.js"]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/vt_internal/css/vt_internal.css"
@@ -158,7 +158,7 @@ scheduler_events = {
 	"cron": {
 			# Chaque vendredi à 19h
 			"0 19 * * 5": [
-					"vt_internal.vt_internal.weekly_hours_report.run_weekly_hours_report"
+					"vt_internal.vt_internal.weekly_hours_report.send_by_mail_weekly_hours_report"
 			]
 	}
 }

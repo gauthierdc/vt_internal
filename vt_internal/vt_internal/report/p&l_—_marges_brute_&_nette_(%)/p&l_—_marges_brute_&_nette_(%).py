@@ -362,13 +362,13 @@ def execute(filters=None):
 	net_margin_pct = (net_profit_total / ca_total * 100) if ca_total else 0
 
 	# Arrondis : montants à l’unité, % à 1 décimale
-	gross_income_total_r = round(gross_income_total)
+	gross_profit_total_r = round(gross_profit_total)
 	net_profit_total_r = round(net_profit_total)
 	gross_margin_pct_r = round(gross_margin_pct, 1)
 	net_margin_pct_r = round(net_margin_pct, 1)
 
 	report_summary = [
-		{"label": _("Marge brute"), "value": gross_income_total_r, "indicator": "Blue", "datatype": "Currency"},
+		{"label": _("Marge brute"), "value": gross_profit_total_r, "indicator": "Blue", "datatype": "Currency"},
 		{"label": _("Marge brute %"), "value": gross_margin_pct_r, "datatype": "Percent", "indicator": "Green" if gross_margin_pct_r >= 0 else "Red"},
 		{"label": _("Marge nette"), "value": net_profit_total_r, "datatype": "Currency", "indicator": "Green" if net_profit_total_r >= 0 else "Red"},
 		{"label": _("Marge nette %"), "value": net_margin_pct_r, "datatype": "Percent", "indicator": "Green" if net_margin_pct_r >= 0 else "Red"},

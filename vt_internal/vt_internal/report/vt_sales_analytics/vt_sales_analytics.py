@@ -1,13 +1,15 @@
-# Copyright (c) 2013, Frappe Technologies Pvt. Ltd. and contributors
+# Copyright (c) 2013, Frappe Technologies Pvt. Ltd.
 # For license information, please see license.txt
 
 import frappe
 from frappe import _, scrub
-from frappe.utils import add_days, add_to_date, flt, getdate
+from frappe.utils import add_days, add_to_date, flt, getdate, cint
 from erpnext.accounts.utils import get_fiscal_year
+
 
 def execute(filters=None):
     return Analytics(filters).run()
+
 
 class Analytics(object):
     def __init__(self, filters=None):
@@ -22,20 +24,83 @@ class Analytics(object):
             "Jan", "Feb", "Mar", "Apr", "May", "Jun",
             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
         ]
+        # Nouveau : axe colonnes
+        self.column_by = (self.filters.get("column_by") or "Période")
+
         if self.filters.get("tree_type") == "Secteur VT":
             self.filters.tree_type = "Secteur VT"
+
         self.get_period_date_ranges()
 
+    # ----------------------------- Run ---------------------------------------
+
     def run(self):
-        self.get_columns()
-        self.get_data()
+        """
+        Si colonnes = périodes, on peut construire les colonnes avant les données.
+        Sinon on a besoin des données pour connaître les valeurs distinctes de col_entity.
+        """
+        if self.column_by == "Période":
+            self.get_columns()
+            self.get_data()
+        else:
+            self.get_data()
+            self.get_columns()
+
         self.get_chart_data()
+
         skip_total_row = 0
         if self.filters.tree_type in ["Supplier Group", "Item Group", "Customer Group", "Territory"]:
             skip_total_row = 1
+
         return self.columns, self.data, None, self.chart, None, skip_total_row
 
+    # ----------------------------- Helpers pivot -----------------------------
+
+    def get_col_entity_select(self, table_alias="s", item_alias=None):
+        """
+        Pour SQL: renvoie (select_expression, label, fieldtype, options) pour la colonne dynamique.
+        Si Période, None (on reste sur les dates).
+        """
+        if self.column_by == "Période":
+            return (None, None, None, None)
+
+        match self.column_by:
+            case "Secteur VT":
+                return (f"{table_alias}.secteur_vt as col_entity", _("Secteur VT"), "Link", "Secteur VT")
+            case "Assurance":
+                return (f"{table_alias}.custom_insurance_client as col_entity", _("Assurance"), "Data", "")
+            case "Responsable du devis":
+                return (f"{table_alias}.custom_responsable_du_devis as col_entity", _("Responsable du devis"), "Link", "User")
+            # (Retiré: case "Origine" — on ne permet plus column_by = "Origine")
+            case _:
+                return (None, None, None, None)
+
+    def get_col_entity_field_for_get_all(self):
+        """
+        Pour frappe.get_all: champ équivalent 'as col_entity' si disponible sans jointure.
+        (Origine nécessite une jointure et n'est donc pas proposée ici.)
+        """
+        if self.column_by == "Période":
+            return None
+        if self.column_by == "Secteur VT":
+            return "secteur_vt as col_entity"
+        if self.column_by == "Assurance":
+            return "custom_insurance_client as col_entity"
+        if self.column_by == "Responsable du devis":
+            return "custom_responsable_du_devis as col_entity"
+        # Origine -> non pris en charge via get_all (besoin de jointure item)
+        return None
+
+    def current_col_key(self, d):
+        """Clé de colonne effective selon le mode."""
+        if self.column_by == "Période":
+            return self.get_period(d.get(self.date_field))
+        return (getattr(d, "col_entity", None) or _("(vide)"))
+
+    # ----------------------------- Colonnes ----------------------------------
+
     def get_columns(self):
+        # 1) Colonne d'entité (ligne)
         if self.filters.tree_type == "Secteur VT":
             self.columns = [
                 {
@@ -69,15 +134,17 @@ class Analytics(object):
                     "width": 200 if self.filters.tree_type in ["Order Type", "Origine", "Assurance"] else 140,
                 }
             ]
+
         if self.filters.tree_type in ["Customer", "Supplier", "Item"]:
             self.columns.append(
                 {
-                    "label": _(self.filters.tree_type + " Name"),
+                    "label": _(self.filters.tree_type + " Name") if self.filters.tree_type != "Item" else _("Item Name"),
                     "fieldname": "entity_name",
                     "fieldtype": "Data",
                     "width": 140,
                 }
             )
+
         if self.filters.tree_type == "Item":
             self.columns.append(
                 {
@@ -88,58 +155,63 @@ class Analytics(object):
                     "width": 100,
                 }
             )
-        for end_date in self.periodic_daterange:
-            period = self.get_period(end_date)
-            self.columns.append(
-                {"label": _(period), "fieldname": scrub(period), "fieldtype": "Float", "width": 120}
-            )
-        self.columns.append(
-            {"label": _("Total"), "fieldname": "total", "fieldtype": "Float", "width": 120}
-        )
+
+        # 2) Colonnes dynamiques
+        if self.column_by == "Période":
+            for end_date in self.periodic_daterange:
+                period = self.get_period(end_date)
+                self.columns.append(
+                    {"label": _(period), "fieldname": scrub(period), "fieldtype": "Float", "width": 120}
+                )
+        else:
+            # Valeurs distinctes rencontrées dans les données
+            for key in sorted(self.all_column_keys or []):
+                self.columns.append(
+                    {"label": _(str(key)), "fieldname": scrub(str(key)), "fieldtype": "Float", "width": 140}
+                )
+
+        self.columns.append({"label": _("Total"), "fieldname": "total", "fieldtype": "Float", "width": 120})
+
+    # ----------------------------- Données -----------------------------------
 
     def get_data(self):
         if self.filters.tree_type == "Par verre":
             self.get_sales_transactions_based_on_glass()
-            self.get_rows()
+            self.get_rows_or_groups()
         elif self.filters.tree_type == "Secteur VT":
             self.get_sales_transactions_based_on_secteur()
-            self.get_rows_by_group()
+            self.get_rows_or_groups(grouped=True)
         elif self.filters.tree_type in ["Customer", "Supplier"]:
             self.get_sales_transactions_based_on_customers_or_suppliers()
-            self.get_rows()
+            self.get_rows_or_groups()
         elif self.filters.tree_type == "Item":
             self.get_sales_transactions_based_on_items()
-            self.get_rows()
+            self.get_rows_or_groups()
         elif self.filters.tree_type in ["Customer Group", "Supplier Group", "Territory"]:
             self.get_sales_transactions_based_on_customer_or_territory_group()
-            self.get_rows_by_group()
+            self.get_rows_or_groups(grouped=True)
         elif self.filters.tree_type == "Item Group":
             self.get_sales_transactions_based_on_item_group()
-            self.get_rows_by_group()
+            self.get_rows_or_groups(grouped=True)
         elif self.filters.tree_type == "Order Type":
             self.get_sales_transactions_based_on_order_type()
-            self.get_rows_by_group()
+            self.get_rows_or_groups(grouped=True)  # garde la hiérarchie "Order Types"
         elif self.filters.tree_type == "Origine":
             self.get_sales_transactions_based_on_origine()
-            self.get_rows()
+            self.get_rows_or_groups()
         elif self.filters.tree_type == "Assurance":
             self.get_sales_transactions_based_on_assurance()
-            self.get_rows()
+            self.get_rows_or_groups()
         elif self.filters.tree_type == "Project":
             self.get_sales_transactions_based_on_project()
-            self.get_rows()
+            self.get_rows_or_groups()
         elif self.filters.tree_type == "Responsable du devis":
             self.get_sales_transactions_based_on_responsable()
-            self.get_rows()
+            self.get_rows_or_groups()
 
-    def get_sales_transactions_based_on_secteur(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_net_total as value_field"
-        else:
-            value_field = "total_qty as value_field"
+    # ----------------------------- Fetchers ----------------------------------
 
-        entity_field = "secteur_vt as entity"
-
+    def _common_filters_dict(self):
         filters = {
             "docstatus": 1,
             "company": self.filters.company,
@@ -153,11 +225,42 @@ class Analytics(object):
             filters["custom_insurance_client"] = self.filters.insurance
         if self.filters.get("custom_responsable_du_devis"):
             filters["custom_responsable_du_devis"] = self.filters.custom_responsable_du_devis
+        return filters
+
+    def _common_sql_filters(self, alias="s"):
+        secteur_filter = ""
+        cost_center_filter = ""
+        insurance_filter = ""
+        responsable_filter = ""
+        params = [self.filters.company, self.filters.from_date, self.filters.to_date]
+
+        if self.filters.get("secteur"):
+            secteur_filter = f" and {alias}.secteur_vt = %s"
+            params.append(self.filters.secteur)
+        if self.filters.get("cost_center"):
+            cost_center_filter = f" and {alias}.cost_center = %s"
+            params.append(self.filters.cost_center)
+        if self.filters.get("insurance"):
+            insurance_filter = f" and {alias}.custom_insurance_client = %s"
+            params.append(self.filters.insurance)
+        if self.filters.get("custom_responsable_du_devis"):
+            responsable_filter = f" and {alias}.custom_responsable_du_devis = %s"
+            params.append(self.filters.custom_responsable_du_devis)
+
+        return secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params
+
+    # -- Secteur (hiérarchique) via get_all
+    def get_sales_transactions_based_on_secteur(self):
+        value_field = "base_net_total as value_field" if self.filters["value_quantity"] == "Value" else "total_qty as value_field"
+        fields = ["secteur_vt as entity", value_field, self.date_field]
+        col_field = self.get_col_entity_field_for_get_all()
+        if col_field:
+            fields.append(col_field)
 
         self.entries = frappe.get_all(
             self.filters.doc_type,
-            fields=[entity_field, value_field, self.date_field],
-            filters=filters,
+            fields=fields,
+            filters=self._common_filters_dict(),
         )
         self.get_secteur_groups()
 
@@ -170,125 +273,78 @@ class Analytics(object):
         for d in self.group_entries:
             self.depth_map.setdefault(d["name"], 0)
 
+    # -- Order Type (SQL)
     def get_sales_transactions_based_on_order_type(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_net_total"
-        else:
-            value_field = "total_qty"
+        value_field = "base_net_total" if self.filters["value_quantity"] == "Value" else "total_qty"
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params = self._common_sql_filters("s")
+        col_select, _, _, _ = self.get_col_entity_select("s", item_alias="i")
 
-        secteur_filter = ""
-        cost_center_filter = ""
-        insurance_filter = ""
-        responsable_filter = ""
-        params = [self.filters.company, self.filters.from_date, self.filters.to_date]
-        if self.filters.get("secteur"):
-            secteur_filter = " and s.secteur_vt = %s"
-            params.append(self.filters.secteur)
-        if self.filters.get("cost_center"):
-            cost_center_filter = " and s.cost_center = %s"
-            params.append(self.filters.cost_center)
-        if self.filters.get("insurance"):
-            insurance_filter = " and s.custom_insurance_client = %s"
-            params.append(self.filters.insurance)
-        if self.filters.get("custom_responsable_du_devis"):
-            responsable_filter = " and s.custom_responsable_du_devis = %s"
-            params.append(self.filters.custom_responsable_du_devis)
+        select_col = f", {col_select}" if (col_select and self.column_by != "Période") else ""
+        date_select = f", s.{self.date_field}" if self.column_by == "Période" else ""
 
         self.entries = frappe.db.sql(
-            """ select s.order_type as entity, s.{value_field} as value_field, s.{date_field}
-            from `tabSales Order` s where s.docstatus = 1 and s.company = %s and s.{date_field} between %s and %s
-            and ifnull(s.order_type, '') != ''{secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter} order by s.order_type
-        """.format(
-                date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter, insurance_filter=insurance_filter, responsable_filter=responsable_filter
-            ),
+            f"""
+            select s.order_type as entity, s.{value_field} as value_field{date_select}{select_col}
+            from `tabSales Order` s
+            where s.docstatus = 1 and s.company = %s and s.{self.date_field} between %s and %s
+              and ifnull(s.order_type, '') != ''{secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
+            order by s.order_type
+            """,
             tuple(params),
             as_dict=1,
         )
-
         self.get_teams()
 
+    # -- Origine (SQL)
     def get_sales_transactions_based_on_origine(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "SUM(i.base_net_amount)"
-        else:
-            value_field = "COUNT(DISTINCT s.name)"
-
-        secteur_filter = ""
-        cost_center_filter = ""
-        insurance_filter = ""
-        responsable_filter = ""
-        params = [self.filters.company, self.filters.from_date, self.filters.to_date]
-        if self.filters.get("secteur"):
-            secteur_filter = " and s.secteur_vt = %s"
-            params.append(self.filters.secteur)
-        if self.filters.get("cost_center"):
-            cost_center_filter = " and s.cost_center = %s"
-            params.append(self.filters.cost_center)
-        if self.filters.get("insurance"):
-            insurance_filter = " and s.custom_insurance_client = %s"
-            params.append(self.filters.insurance)
-        if self.filters.get("custom_responsable_du_devis"):
-            responsable_filter = " and s.custom_responsable_du_devis = %s"
-            params.append(self.filters.custom_responsable_du_devis)
+        value_field = "SUM(i.base_net_amount)" if self.filters["value_quantity"] == "Value" else "COUNT(DISTINCT s.name)"
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params = self._common_sql_filters("s")
+        # colonne dynamique éventuelle
+        col_select, _, _, _ = self.get_col_entity_select("s", item_alias="i")
+        select_col = f", {col_select}" if (col_select and self.column_by != "Période") else ""
+        date_select = f", s.{self.date_field}" if self.column_by == "Période" else ""
 
         self.entries = frappe.db.sql(
-            """
+            f"""
             select 
                 case when i.prevdoc_docname is not null then 'Devis' else 'Commande' end as entity,
-                {value_field} as value_field, 
-                s.{date_field}
-            from `tabSales Order Item` i , `tabSales Order` s
-            where s.name = i.parent and s.docstatus = 1 and s.company = %s
-            and s.{date_field} between %s and %s{secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
-            group by entity, s.{date_field}
-        """.format(
-                date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter, insurance_filter=insurance_filter, responsable_filter=responsable_filter
-            ),
+                {value_field} as value_field
+                {date_select}
+                {select_col}
+            from `tabSales Order Item` i
+            join `tabSales Order` s on s.name = i.parent
+            where s.docstatus = 1 and s.company = %s
+              and s.{self.date_field} between %s and %s
+              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
+            group by entity{', s.' + self.date_field if self.column_by == 'Période' else ''}{', col_entity' if (self.column_by != 'Période' and select_col) else ''}
+            """,
             tuple(params),
             as_dict=1,
         )
 
+    # -- Assurance (SQL)
     def get_sales_transactions_based_on_assurance(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "SUM(s.base_net_total)"
-        else:
-            value_field = "COUNT(DISTINCT s.name)"
-
-        secteur_filter = ""
-        cost_center_filter = ""
-        insurance_filter = ""
-        responsable_filter = ""
-        params = [self.filters.company, self.filters.from_date, self.filters.to_date]
-        if self.filters.get("secteur"):
-            secteur_filter = " and s.secteur_vt = %s"
-            params.append(self.filters.secteur)
-        if self.filters.get("cost_center"):
-            cost_center_filter = " and s.cost_center = %s"
-            params.append(self.filters.cost_center)
-        if self.filters.get("insurance"):
-            insurance_filter = " and s.custom_insurance_client = %s"
-            params.append(self.filters.insurance)
-        if self.filters.get("custom_responsable_du_devis"):
-            responsable_filter = " and s.custom_responsable_du_devis = %s"
-            params.append(self.filters.custom_responsable_du_devis)
+        value_field = "SUM(s.base_net_total)" if self.filters["value_quantity"] == "Value" else "COUNT(DISTINCT s.name)"
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params = self._common_sql_filters("s")
+        col_select, _, _, _ = self.get_col_entity_select("s", item_alias="i")
+        select_col = f", {col_select}" if (col_select and self.column_by != "Période") else ""
+        date_select = f", s.{self.date_field}" if self.column_by == "Période" else ""
 
         self.entries = frappe.db.sql(
-            """ select s.custom_insurance_client as entity, {value_field} as value_field, s.{date_field}
-            from `tabSales Order` s where s.docstatus = 1 and s.company = %s and s.{date_field} between %s and %s
-            {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
-            group by entity, s.{date_field}
-        """.format(
-                date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter, insurance_filter=insurance_filter, responsable_filter=responsable_filter
-            ),
+            f"""
+            select s.custom_insurance_client as entity, {value_field} as value_field{date_select}{select_col}
+            from `tabSales Order` s
+            where s.docstatus = 1 and s.company = %s and s.{self.date_field} between %s and %s
+              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
+            group by entity{', s.' + self.date_field if self.column_by == 'Période' else ''}{', col_entity' if (self.column_by != 'Période' and select_col) else ''}
+            """,
             tuple(params),
             as_dict=1,
         )
 
+    # -- Customer / Supplier (get_all)
     def get_sales_transactions_based_on_customers_or_suppliers(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_net_total as value_field"
-        else:
-            value_field = "total_qty as value_field"
+        value_field = "base_net_total as value_field" if self.filters["value_quantity"] == "Value" else "total_qty as value_field"
 
         if self.filters.tree_type == "Customer":
             entity = "customer as entity"
@@ -297,63 +353,39 @@ class Analytics(object):
             entity = "supplier as entity"
             entity_name = "supplier_name as entity_name"
 
-        filters = {
-            "docstatus": 1,
-            "company": self.filters.company,
-            self.date_field: ("between", [self.filters.from_date, self.filters.to_date]),
-        }
-        if self.filters.get("secteur"):
-            filters["secteur_vt"] = self.filters.secteur
-        if self.filters.get("cost_center"):
-            filters["cost_center"] = self.filters.cost_center
-        if self.filters.get("insurance"):
-            filters["custom_insurance_client"] = self.filters.insurance
-        if self.filters.get("custom_responsable_du_devis"):
-            filters["custom_responsable_du_devis"] = self.filters.custom_responsable_du_devis
+        fields = [entity, entity_name, value_field, self.date_field]
+        col_field = self.get_col_entity_field_for_get_all()
+        if col_field:
+            fields.append(col_field)
 
         self.entries = frappe.get_all(
             "Sales Order",
-            fields=[entity, entity_name, value_field, self.date_field],
-            filters=filters,
+            fields=fields,
+            filters=self._common_filters_dict(),
         )
 
         self.entity_names = {}
         for d in self.entries:
             self.entity_names.setdefault(d.entity, d.entity_name)
 
+    # -- Items (SQL)
     def get_sales_transactions_based_on_items(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_net_amount"
-        else:
-            value_field = "stock_qty"
-
-        secteur_filter = ""
-        cost_center_filter = ""
-        insurance_filter = ""
-        responsable_filter = ""
-        params = [self.filters.company, self.filters.from_date, self.filters.to_date]
-        if self.filters.get("secteur"):
-            secteur_filter = " and s.secteur_vt = %s"
-            params.append(self.filters.secteur)
-        if self.filters.get("cost_center"):
-            cost_center_filter = " and s.cost_center = %s"
-            params.append(self.filters.cost_center)
-        if self.filters.get("insurance"):
-            insurance_filter = " and s.custom_insurance_client = %s"
-            params.append(self.filters.insurance)
-        if self.filters.get("custom_responsable_du_devis"):
-            responsable_filter = " and s.custom_responsable_du_devis = %s"
-            params.append(self.filters.custom_responsable_du_devis)
+        value_field = "base_net_amount" if self.filters["value_quantity"] == "Value" else "stock_qty"
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params = self._common_sql_filters("s")
+        col_select, _, _, _ = self.get_col_entity_select("s", item_alias="i")
+        select_col = f", {col_select}" if (col_select and self.column_by != "Période") else ""
+        date_select = f", s.{self.date_field}" if self.column_by == "Période" else ""
 
         self.entries = frappe.db.sql(
-            """
-            select i.item_code as entity, i.item_name as entity_name, i.stock_uom, i.{value_field} as value_field, s.{date_field}
-            from `tabSales Order Item` i , `tabSales Order` s
-            where s.name = i.parent and i.docstatus = 1 and s.company = %s
-            and s.{date_field} between %s and %s{secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
-        """.format(
-                date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter, insurance_filter=insurance_filter, responsable_filter=responsable_filter
-            ),
+            f"""
+            select i.item_code as entity, i.item_name as entity_name, i.stock_uom,
+                   i.{value_field} as value_field{date_select}{select_col}
+            from `tabSales Order Item` i
+            join `tabSales Order` s on s.name = i.parent
+            where i.docstatus = 1 and s.company = %s
+              and s.{self.date_field} between %s and %s
+              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
+            """,
             tuple(params),
             as_dict=1,
         )
@@ -362,11 +394,9 @@ class Analytics(object):
         for d in self.entries:
             self.entity_names.setdefault(d.entity, d.entity_name)
 
+    # -- Customer Group / Supplier Group / Territory (get_all + tree)
     def get_sales_transactions_based_on_customer_or_territory_group(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_net_total as value_field"
-        else:
-            value_field = "total_qty as value_field"
+        value_field = "base_net_total as value_field" if self.filters["value_quantity"] == "Value" else "total_qty as value_field"
 
         if self.filters.tree_type == "Customer Group":
             entity_field = "customer_group as entity"
@@ -376,160 +406,166 @@ class Analytics(object):
         else:
             entity_field = "territory as entity"
 
-        filters = {
-            "docstatus": 1,
-            "company": self.filters.company,
-            self.date_field: ("between", [self.filters.from_date, self.filters.to_date]),
-        }
-        if self.filters.get("secteur"):
-            filters["secteur_vt"] = self.filters.secteur
-        if self.filters.get("cost_center"):
-            filters["cost_center"] = self.filters.cost_center
-        if self.filters.get("insurance"):
-            filters["custom_insurance_client"] = self.filters.insurance
-        if self.filters.get("custom_responsable_du_devis"):
-            filters["custom_responsable_du_devis"] = self.filters.custom_responsable_du_devis
+        fields = [entity_field, value_field, self.date_field]
+        col_field = self.get_col_entity_field_for_get_all()
+        if col_field:
+            fields.append(col_field)
 
         self.entries = frappe.get_all(
             "Sales Order",
-            fields=[entity_field, value_field, self.date_field],
-            filters=filters,
+            fields=fields,
+            filters=self._common_filters_dict(),
         )
         self.get_groups()
 
+    # -- Item Group (SQL)
     def get_sales_transactions_based_on_item_group(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_net_amount"
-        else:
-            value_field = "qty"
-
-        secteur_filter = ""
-        cost_center_filter = ""
-        insurance_filter = ""
-        responsable_filter = ""
-        params = [self.filters.company, self.filters.from_date, self.filters.to_date]
-        if self.filters.get("secteur"):
-            secteur_filter = " and s.secteur_vt = %s"
-            params.append(self.filters.secteur)
-        if self.filters.get("cost_center"):
-            cost_center_filter = " and s.cost_center = %s"
-            params.append(self.filters.cost_center)
-        if self.filters.get("insurance"):
-            insurance_filter = " and s.custom_insurance_client = %s"
-            params.append(self.filters.insurance)
-        if self.filters.get("custom_responsable_du_devis"):
-            responsable_filter = " and s.custom_responsable_du_devis = %s"
-            params.append(self.filters.custom_responsable_du_devis)
+        value_field = "base_net_amount" if self.filters["value_quantity"] == "Value" else "qty"
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params = self._common_sql_filters("s")
+        col_select, _, _, _ = self.get_col_entity_select("s", item_alias="i")
+        select_col = f", {col_select}" if (col_select and self.column_by != "Période") else ""
+        date_select = f", s.{self.date_field}" if self.column_by == "Période" else ""
 
         self.entries = frappe.db.sql(
-            """
-            select i.item_group as entity, i.{value_field} as value_field, s.{date_field}
-            from `tabSales Order Item` i , `tabSales Order` s
-            where s.name = i.parent and i.docstatus = 1 and s.company = %s
-            and s.{date_field} between %s and %s{secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
-        """.format(
-                date_field=self.date_field, value_field=value_field, secteur_filter=secteur_filter, cost_center_filter=cost_center_filter, insurance_filter=insurance_filter, responsable_filter=responsable_filter
-            ),
+            f"""
+            select i.item_group as entity, i.{value_field} as value_field{date_select}{select_col}
+            from `tabSales Order Item` i
+            join `tabSales Order` s on s.name = i.parent
+            where i.docstatus = 1 and s.company = %s
+              and s.{self.date_field} between %s and %s
+              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
+            """,
             tuple(params),
             as_dict=1,
         )
 
         self.get_groups()
 
+    # -- Project (get_all)
     def get_sales_transactions_based_on_project(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_net_total as value_field"
-        else:
-            value_field = "total_qty as value_field"
+        value_field = "base_net_total as value_field" if self.filters["value_quantity"] == "Value" else "total_qty as value_field"
 
-        entity = "project as entity"
+        fields = ["project as entity", value_field, self.date_field]
+        col_field = self.get_col_entity_field_for_get_all()
+        if col_field:
+            fields.append(col_field)
 
-        filters = {
-            "docstatus": 1,
-            "company": self.filters.company,
-            "project": ["!=", ""],
-            self.date_field: ("between", [self.filters.from_date, self.filters.to_date]),
-        }
-        if self.filters.get("secteur"):
-            filters["secteur_vt"] = self.filters.secteur
-        if self.filters.get("cost_center"):
-            filters["cost_center"] = self.filters.cost_center
-        if self.filters.get("insurance"):
-            filters["custom_insurance_client"] = self.filters.insurance
-        if self.filters.get("custom_responsable_du_devis"):
-            filters["custom_responsable_du_devis"] = self.filters.custom_responsable_du_devis
+        filters = self._common_filters_dict()
+        filters["project"] = ["!=", ""]
 
         self.entries = frappe.get_all(
             "Sales Order",
-            fields=[entity, value_field, self.date_field],
+            fields=fields,
             filters=filters,
         )
 
+    # -- Responsable (get_all)
     def get_sales_transactions_based_on_responsable(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "base_net_total as value_field"
-        else:
-            value_field = "total_qty as value_field"
+        value_field = "base_net_total as value_field" if self.filters["value_quantity"] == "Value" else "total_qty as value_field"
 
-        filters = {
-            "docstatus": 1,
-            "company": self.filters.company,
-            self.date_field: ("between", [self.filters.from_date, self.filters.to_date]),
-        }
-        if self.filters.get("secteur"):
-            filters["secteur_vt"] = self.filters.secteur
-        if self.filters.get("cost_center"):
-            filters["cost_center"] = self.filters.cost_center
-        if self.filters.get("insurance"):
-            filters["custom_insurance_client"] = self.filters.insurance
-        if self.filters.get("custom_responsable_du_devis"):
-            filters["custom_responsable_du_devis"] = self.filters.custom_responsable_du_devis
+        fields = ["custom_responsable_du_devis as entity", value_field, self.date_field]
+        col_field = self.get_col_entity_field_for_get_all()
+        if col_field:
+            fields.append(col_field)
 
         self.entries = frappe.get_all(
             "Sales Order",
-            fields=["custom_responsable_du_devis as entity", value_field, self.date_field],
-            filters=filters,
+            fields=fields,
+            filters=self._common_filters_dict(),
         )
 
-    def get_rows(self):
-        self.data = []
+    # -- Par verre (SQL)
+    def get_sales_transactions_based_on_glass(self):
+        if self.filters["value_quantity"] == "Value":
+            value_field = "SUM(soi.base_net_amount) AS value_field"
+        else:
+            value_field = "SUM((bom.hauteur / 1000) * (bom.largeur / 1000)) AS value_field"
+
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params = self._common_sql_filters("so")
+        col_select, _, _, _ = self.get_col_entity_select("so", item_alias="soi")
+        select_col = f", {col_select}" if (col_select and self.column_by != "Période") else ""
+        date_select = f", so.{self.date_field}" if self.column_by == "Période" else ""
+
+        self.entries = frappe.db.sql(
+            f"""
+            SELECT
+                (
+                    SELECT bi.item_code
+                    FROM `tabBOM Item` bi
+                    WHERE bi.parent = bom.name
+                    ORDER BY bi.idx ASC
+                    LIMIT 1
+                ) AS entity,
+                {value_field}
+                {date_select}
+                {select_col}
+            FROM `tabSales Order Item` soi
+            JOIN `tabSales Order` so ON soi.parent = so.name
+            JOIN `tabBOM` bom ON soi.bom_no = bom.name
+            WHERE so.docstatus = 1
+              AND soi.item_code IN ('Produit fini (double vitrage)', 'Produit fini (verre)')
+              AND so.company = %s
+              AND so.{self.date_field} BETWEEN %s AND %s
+              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
+            GROUP BY entity{', so.' + self.date_field if self.column_by == 'Période' else ''}{', col_entity' if (self.column_by != 'Période' and select_col) else ''}
+            """,
+            tuple(params),
+            as_dict=1,
+        )
+
+    # ----------------------------- Agrégation 2D -----------------------------
+
+    def get_rows_or_groups(self, grouped=False):
         self.get_periodic_data()
 
-        for entity, period_data in self.entity_periodic_data.items():
+        # Top-N (optionnel) uniquement lorsque colonnes ≠ périodes
+        if self.column_by != "Période":
+            self.limit_columns()
+
+        if grouped:
+            self.get_rows_by_group_generic()
+        else:
+            self.get_rows_generic()
+
+    def iter_column_labels(self):
+        if self.column_by == "Période":
+            return [self.get_period(d) for d in self.periodic_daterange]
+        else:
+            return sorted(self.all_column_keys or [])
+
+    def get_rows_generic(self):
+        self.data = []
+        col_labels = self.iter_column_labels()
+
+        for entity, pdata in self.entity_periodic_data.items():
             row = {
                 "entity": entity,
-                "entity_name": self.entity_names.get(entity) if hasattr(self, "entity_names") else None,
+                "entity_name": getattr(self, "entity_names", {}).get(entity),
             }
-            total = 0
-            for end_date in self.periodic_daterange:
-                period = self.get_period(end_date)
-                amount = flt(period_data.get(period, 0.0))
-                row[scrub(period)] = amount
+            total = 0.0
+            for label in col_labels:
+                amount = flt(pdata.get(label, 0.0))
+                row[scrub(str(label))] = amount
                 total += amount
-
             row["total"] = total
-
             if self.filters.tree_type == "Item":
-                row["stock_uom"] = period_data.get("stock_uom")
-
+                row["stock_uom"] = pdata.get("stock_uom")
             self.data.append(row)
 
-    def get_rows_by_group(self):
-        self.get_periodic_data()
+    def get_rows_by_group_generic(self):
+        col_labels = self.iter_column_labels()
         out = []
 
         for d in reversed(self.group_entries):
             row = {"entity": d.name, "indent": self.depth_map.get(d.name)}
-            total = 0
-            for end_date in self.periodic_daterange:
-                period = self.get_period(end_date)
-                amount = flt(self.entity_periodic_data.get(d.name, {}).get(period, 0.0))
-                row[scrub(period)] = amount
+            total = 0.0
+            for label in col_labels:
+                amount = flt(self.entity_periodic_data.get(d.name, {}).get(label, 0.0))
+                row[scrub(str(label))] = amount
                 if d.parent and (self.filters.tree_type != "Order Type" or d.parent == "Order Types"):
-                    self.entity_periodic_data.setdefault(d.parent, frappe._dict()).setdefault(period, 0.0)
-                    self.entity_periodic_data[d.parent][period] += amount
+                    self.entity_periodic_data.setdefault(d.parent, frappe._dict()).setdefault(label, 0.0)
+                    self.entity_periodic_data[d.parent][label] += amount
                 total += amount
-
             row["total"] = total
             out = [row] + out
 
@@ -537,16 +573,54 @@ class Analytics(object):
 
     def get_periodic_data(self):
         self.entity_periodic_data = frappe._dict()
+        self.all_column_keys = set()
 
         for d in self.entries:
             if self.filters.tree_type == "Supplier Group":
                 d.entity = self.parent_child_map.get(d.entity)
-            period = self.get_period(d.get(self.date_field))
-            self.entity_periodic_data.setdefault(d.entity, frappe._dict()).setdefault(period, 0.0)
-            self.entity_periodic_data[d.entity][period] += flt(d.value_field)
+
+            col_key = self.current_col_key(d)
+            self.all_column_keys.add(col_key)
+
+            self.entity_periodic_data.setdefault(d.entity, frappe._dict()).setdefault(col_key, 0.0)
+            self.entity_periodic_data[d.entity][col_key] += flt(d.value_field)
 
             if self.filters.tree_type == "Item":
-                self.entity_periodic_data[d.entity]["stock_uom"] = d.stock_uom
+                self.entity_periodic_data[d.entity]["stock_uom"] = getattr(d, "stock_uom", None)
+
+    def limit_columns(self):
+        """Top-N colonnes + 'Autres' (uniquement quand column_by ≠ Période)."""
+        n = cint(self.filters.get("column_limit") or 0)
+        if not n or not self.all_column_keys:
+            return
+
+        # total par colonne
+        totals_by_col = {col: 0.0 for col in self.all_column_keys}
+        for _, pdata in self.entity_periodic_data.items():
+            for col, v in pdata.items():
+                if col == "stock_uom":
+                    continue
+                totals_by_col[col] = totals_by_col.get(col, 0.0) + flt(v)
+
+        top_cols = {c for c, _ in sorted(totals_by_col.items(), key=lambda x: x[1], reverse=True)[:n]}
+        others_key = _("Autres")
+        new_keys = set(top_cols)
+
+        # recompactage
+        for _, pdata in self.entity_periodic_data.items():
+            others_sum = 0.0
+            for col in list(pdata.keys()):
+                if col in ("stock_uom",):
+                    continue
+                if col not in top_cols:
+                    others_sum += flt(pdata.pop(col, 0.0))
+            if others_sum:
+                pdata[others_key] = flt(pdata.get(others_key, 0.0)) + others_sum
+
+        new_keys.add(others_key)
+        self.all_column_keys = new_keys
+
+    # ----------------------------- Périodes ----------------------------------
 
     def get_period(self, posting_date):
         if self.filters.range == "Weekly":
@@ -594,6 +668,8 @@ class Analytics(object):
             if period_end_date == to_date:
                 break
 
+    # ----------------------------- Groupes -----------------------------------
+
     def get_groups(self):
         if self.filters.tree_type == "Territory":
             parent = "parent_territory"
@@ -624,12 +700,13 @@ class Analytics(object):
         self.depth_map = frappe._dict()
 
         self.group_entries = frappe.db.sql(
-            """ select * from (select "Order Types" as name, 0 as lft,
-            2 as rgt, '' as parent union select distinct order_type as name, 1 as lft, 1 as rgt, "Order Types" as parent
-            from `tab{doctype}` where ifnull(order_type, '') != '') as b order by lft, name
-        """.format(
-                doctype=self.filters.doc_type
-            ),
+            """ select * from (
+                select "Order Types" as name, 0 as lft, 2 as rgt, '' as parent
+                union
+                select distinct order_type as name, 1 as lft, 1 as rgt, "Order Types" as parent
+                from `tab{doctype}` where ifnull(order_type, '') != ''
+            ) as b order by lft, name
+            """.format(doctype=self.filters.doc_type),
             as_dict=1,
         )
 
@@ -644,15 +721,20 @@ class Analytics(object):
             frappe.db.sql(""" select name, supplier_group from `tabSupplier`""")
         )
 
+    # ----------------------------- Chart -------------------------------------
+
     def get_chart_data(self):
         length = len(self.columns)
 
+        # Labels des colonnes (sans la/les colonnes d'identité & Total)
         if self.filters.tree_type in ["Customer", "Supplier"]:
-            labels = [d.get("label") for d in self.columns[2 : length - 1]]
+            col_slice = self.columns[2 : length - 1]
         elif self.filters.tree_type == "Item":
-            labels = [d.get("label") for d in self.columns[3 : length - 1]]
+            col_slice = self.columns[3 : length - 1]
         else:
-            labels = [d.get("label") for d in self.columns[1 : length - 1]]
+            col_slice = self.columns[1 : length - 1]
+
+        labels = [d.get("label") for d in col_slice]
         self.chart = {"data": {"labels": labels, "datasets": []}, "type": "line"}
 
         if self.filters["value_quantity"] == "Value":
@@ -660,62 +742,7 @@ class Analytics(object):
         else:
             self.chart["fieldtype"] = "Float"
 
-    def get_sales_transactions_based_on_glass(self):
-        if self.filters["value_quantity"] == "Value":
-            value_field = "SUM(soi.base_net_amount) AS value_field"
-        else:
-            value_field = "SUM((bom.hauteur / 1000) * (bom.largeur / 1000)) AS value_field"
-
-        secteur_filter = ""
-        cost_center_filter = ""
-        insurance_filter = ""
-        responsable_filter = ""
-        params = [self.filters.company, self.filters.from_date, self.filters.to_date]
-        if self.filters.get("secteur"):
-            secteur_filter = " and so.secteur_vt = %s"
-            params.append(self.filters.secteur)
-        if self.filters.get("cost_center"):
-            cost_center_filter = " and so.cost_center = %s"
-            params.append(self.filters.cost_center)
-        if self.filters.get("insurance"):
-            insurance_filter = " and so.custom_insurance_client = %s"
-            params.append(self.filters.insurance)
-        if self.filters.get("custom_responsable_du_devis"):
-            responsable_filter = " and so.custom_responsable_du_devis = %s"
-            params.append(self.filters.custom_responsable_du_devis)
-
-        self.entries = frappe.db.sql(
-            """
-            SELECT
-                (
-                    SELECT bi.item_code
-                    FROM `tabBOM Item` bi
-                    WHERE bi.parent = bom.name
-                    ORDER BY bi.idx ASC
-                    LIMIT 1
-                ) AS entity,
-                {value_field},
-                so.{date_field}
-            FROM `tabSales Order Item` soi
-            JOIN `tabSales Order` so ON soi.parent = so.name
-            JOIN `tabBOM` bom ON soi.bom_no = bom.name
-            WHERE so.docstatus = 1
-            AND soi.item_code IN ('Produit fini (double vitrage)', 'Produit fini (verre)')
-            AND so.company = %s
-            AND so.{date_field} BETWEEN %s AND %s
-            {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
-            GROUP BY entity, so.{date_field}
-            """.format(
-                value_field=value_field,
-                date_field=self.date_field,
-                secteur_filter=secteur_filter,
-                cost_center_filter=cost_center_filter,
-                insurance_filter=insurance_filter,
-                responsable_filter=responsable_filter
-            ),
-            tuple(params),
-            as_dict=1,
-        )
+    # ----------------------------- Misc SQL util -----------------------------
 
     def get_additional_filters_sql(self):
         filters = []
