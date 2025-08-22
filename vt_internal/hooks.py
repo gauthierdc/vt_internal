@@ -28,6 +28,8 @@ app_include_js = ["/assets/vt_internal/js/bundle_editor_patch.js", "/assets/vt_i
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
+doctype_js = {"Quotation" : "public/js/quotation.js"}
+doctype_list_js = {"Quotation" : "public/js/quotation_list.js"}
 # doctype_js = {"doctype" : "public/js/doctype.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -133,6 +135,15 @@ app_include_js = ["/assets/vt_internal/js/bundle_editor_patch.js", "/assets/vt_i
 # 	}
 # }
 
+doc_events = {
+	"Quotation": {
+		"before_save": "vt_internal.vt_internal.events.quotation.before_save",
+		"before_insert": "vt_internal.vt_internal.events.quotation.before_insert",
+		"before_print": "vt_internal.vt_internal.events.quotation.before_print",
+    "before_update_after_submit": "vt_internal.vt_internal.events.quotation.before_update_after_submit"
+	}
+}
+
 # Scheduled Tasks
 # ---------------
 
@@ -159,7 +170,7 @@ scheduler_events = {
 			# Chaque vendredi à 19h
 			"0 19 * * 5": [
 					"vt_internal.vt_internal.weekly_hours_report.send_by_mail_weekly_hours_report"
-			]
+			],
 	}
 }
 
