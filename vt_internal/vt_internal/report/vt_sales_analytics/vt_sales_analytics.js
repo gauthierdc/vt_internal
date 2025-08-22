@@ -56,13 +56,6 @@ frappe.query_reports["VT Sales Analytics"] = {
 			}
 		},
 		{
-			fieldname: "column_limit",
-			label: __("Limiter à (Top-N colonnes)"),
-			fieldtype: "Int",
-			default: 0, // 0 = illimité
-			description: __("Utilisé uniquement si 'Colonnes par' ≠ Période")
-		},
-		{
 			fieldname: "secteur",
 			label: __("Secteur"),
 			fieldtype: "Link",
@@ -182,15 +175,9 @@ frappe.query_reports["VT Sales Analytics"] = {
 
 function toggle_period_vs_dimension_ui(report, column_by) {
 	const range = report.get_filter("range");
-	const col_limit = report.get_filter("column_limit");
 
 	// Range visible uniquement si on a les périodes en colonnes
 	const show_range = (column_by === "Période");
 	range.df.hidden = !show_range;
 	range.refresh && range.refresh();
-
-	// Column limit pertinent uniquement si colonnes ≠ périodes
-	const show_limit = (column_by !== "Période");
-	col_limit.df.hidden = !show_limit;
-	col_limit.refresh && col_limit.refresh();
 }

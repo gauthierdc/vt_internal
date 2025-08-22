@@ -518,10 +518,6 @@ class Analytics(object):
     def get_rows_or_groups(self, grouped=False):
         self.get_periodic_data()
 
-        # Top-N (optionnel) uniquement lorsque colonnes ≠ périodes
-        if self.column_by != "Période":
-            self.limit_columns()
-
         if grouped:
             self.get_rows_by_group_generic()
         else:
@@ -587,38 +583,6 @@ class Analytics(object):
 
             if self.filters.tree_type == "Item":
                 self.entity_periodic_data[d.entity]["stock_uom"] = getattr(d, "stock_uom", None)
-
-    def limit_columns(self):
-        """Top-N colonnes + 'Autres' (uniquement quand column_by ≠ Période)."""
-        n = cint(self.filters.get("column_limit") or 0)
-        if not n or not self.all_column_keys:
-            return
-
-        # total par colonne
-        totals_by_col = {col: 0.0 for col in self.all_column_keys}
-        for _, pdata in self.entity_periodic_data.items():
-            for col, v in pdata.items():
-                if col == "stock_uom":
-                    continue
-                totals_by_col[col] = totals_by_col.get(col, 0.0) + flt(v)
-
-        top_cols = {c for c, _ in sorted(totals_by_col.items(), key=lambda x: x[1], reverse=True)[:n]}
-        others_key = _("Autres")
-        new_keys = set(top_cols)
-
-        # recompactage
-        for _, pdata in self.entity_periodic_data.items():
-            others_sum = 0.0
-            for col in list(pdata.keys()):
-                if col in ("stock_uom",):
-                    continue
-                if col not in top_cols:
-                    others_sum += flt(pdata.pop(col, 0.0))
-            if others_sum:
-                pdata[others_key] = flt(pdata.get(others_key, 0.0)) + others_sum
-
-        new_keys.add(others_key)
-        self.all_column_keys = new_keys
 
     # ----------------------------- Périodes ----------------------------------
 
