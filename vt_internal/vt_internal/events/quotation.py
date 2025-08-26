@@ -67,7 +67,7 @@ def before_save(doc, method=None):
         f"quotation={doc.name}&contact_mobile={mobile}&contact_email={email}"
     )
 
-def before_print(doc, method=None):
+def before_print(doc, method=None, print_settings=None, *args, **kwargs):
     """
     Avant impression : calcule les poids, quantités et surfaces visibles.
     Met à jour les champs d'affichage et les prix par surface.
@@ -82,14 +82,19 @@ def before_print(doc, method=None):
 
     for item in doc.items:
         if item.bom_no:
+            # get_value peut renvoyer None ; et avec plusieurs champs => tuple
             bom = frappe.db.get_value("BOM", item.bom_no, ["reference_ligne", "hauteur", "largeur"])
-            item.reference_ligne = bom[0]
-            # Calcul du prix par surface
-            surface = bom[1] / 1000 * bom[2] / 1000 if bom[1] and bom[2] else 0
-            item.price_par_surface = round(item.rate / surface, 2) if surface else 0
-            doc.surface_of_visible_items = round(
-                doc.surface_of_visible_items + item.qty * surface, 2
-            )
+            if bom:
+                reference_ligne, hauteur, largeur = bom
+                item.reference_ligne = reference_ligne
+                surface = (hauteur or 0) / 1000 * (largeur or 0) / 1000
+                item.price_par_surface = round(item.rate / surface, 2) if surface else 0
+                doc.surface_of_visible_items = round(doc.surface_of_visible_items + (item.qty or 0) * surface, 2)
+            else:
+                # Pas de BOM trouvé : sécuriser les champs utilisés dans le print
+                item.reference_ligne = getattr(item, "reference_ligne", None)
+                item.price_par_surface = getattr(item, "price_par_surface", 0)
+
 
 def after_save(doc, method=None):
     """Après sauvegarde complète."""
