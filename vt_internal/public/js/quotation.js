@@ -148,7 +148,7 @@ function addStatusDialogButton(frm) {
     frm.add_custom_button('Statut de suivi', () => {
         let options_statut;
         if (!frm.doc.custom_dernier_statut_de_suivi) {
-            options_statut = `\nRelance automatique\nRelance manuelle\nCurieux (ne pas relancer)`;
+            options_statut = `\nRelance automatique\nRelance manuelle\nCurieux (ne pas relancer)\nCommande à venir`;
         } else {
             options_statut = `\nRelance automatique\nRelance manuelle\nCurieux (ne pas relancer)\nAbsent - À rappeler\nProjet abandonné\nProjet perdu prix\nProjet perdu par le client\nProjet perdu délai\nEn cours\nÀ travailler\nAppel d'offre\nCommande à venir\nVariante`;
         }
