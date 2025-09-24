@@ -8,7 +8,10 @@
  "engine": "InnoDB",
  "field_order": [
   "informations_section",
-  "geolocation_xovj",
+  "open_in_google_maps",
+  "address",
+  "distance",
+  "op\u00e9rateur",
   "column_break_wpqh",
   "status",
   "r\u00e9f\u00e9rence_pi\u00e8ce",
@@ -16,9 +19,6 @@
   "ends_on",
   "completion_on",
   "all_day",
-  "address",
-  "address_display",
-  "distance",
   "description",
   "column_break_vtni",
   "projet",
@@ -28,24 +28,27 @@
   "contact",
   "phone",
   "email",
-  "op\u00e9rateur",
+  "cost_center",
   "company",
   "ordering_party",
   "ordering_party_notified",
-  "cost_center",
   "section_break_woyn",
   "plans",
   "attestation_de_tva",
+  "photo_8",
   "column_break_lqms",
   "photo_2",
   "mandat_assurance",
+  "photo_9",
   "column_break_rtaa",
   "photo_3",
   "bon_pour_accord_assurance",
   "column_break_vxcg",
   "photo_4",
+  "photo_6",
   "column_break_ekbf",
   "photo_5",
+  "photo_7",
   "section_break_puil",
   "cotes",
   "column_break_sxtj",
@@ -58,11 +61,6 @@
    "fieldname": "informations_section",
    "fieldtype": "Section Break",
    "label": "Informations"
-  },
-  {
-   "fetch_from": "address.map_location",
-   "fieldname": "geolocation_xovj",
-   "fieldtype": "Geolocation"
   },
   {
    "fieldname": "column_break_wpqh",
@@ -119,12 +117,6 @@
    "fieldtype": "Link",
    "label": "Address",
    "options": "Address"
-  },
-  {
-   "fieldname": "address_display",
-   "fieldtype": "Small Text",
-   "label": "Address Display",
-   "read_only": 1
   },
   {
    "fetch_from": "address.custom_distance_m",
@@ -211,6 +203,7 @@
    "default": "__user",
    "fieldname": "ordering_party",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Donneur d'ordre",
    "options": "User"
   },
@@ -327,6 +320,31 @@
    "fieldtype": "Link",
    "label": "Sales Order",
    "options": "Sales Order"
+  },
+  {
+   "fieldname": "open_in_google_maps",
+   "fieldtype": "Button",
+   "label": "Ouvrir dans Google Maps"
+  },
+  {
+   "fieldname": "photo_8",
+   "fieldtype": "Attach Image",
+   "label": "Photo 8"
+  },
+  {
+   "fieldname": "photo_9",
+   "fieldtype": "Attach Image",
+   "label": "Photo 9"
+  },
+  {
+   "fieldname": "photo_6",
+   "fieldtype": "Attach Image",
+   "label": "Photo 6"
+  },
+  {
+   "fieldname": "photo_7",
+   "fieldtype": "Attach Image",
+   "label": "Photo 7"
   }
  ],
  "image_field": "plans",
@@ -338,7 +356,7 @@
    "link_fieldname": "custom_visite_technique"
   }
  ],
- "modified": "2025-08-13 17:21:54.754042",
+ "modified": "2025-09-18 13:01:26.146767",
  "modified_by": "Administrator",
  "module": "VT internal",
  "name": "Visite Technique",

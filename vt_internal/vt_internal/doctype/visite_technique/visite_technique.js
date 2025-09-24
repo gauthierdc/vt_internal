@@ -99,6 +99,71 @@ frappe.ui.form.on('Visite Technique', {
             };
        }
     });
+
+        // Ajout : remplacer le texte du bouton "open_in_google_maps" par l'adresse et appliquer un fond bleu
+        const enhanceOpenInMapsButton = () => {
+            try {
+                const applyStyles = (displayAddress) => {
+                    const field = frm.fields_dict && frm.fields_dict.open_in_google_maps;
+                    if (!field || !field.wrapper) return;
+                    const $btn = $(field.wrapper).find('.btn, button').first();
+                    if (!$btn || !$btn.length) return;
+
+                    // Texte avec adresse (ou fallback)
+                    const label = displayAddress ? `📍 ${displayAddress}` : '📍 Ouvrir dans Google Maps';
+                    $btn.text(label);
+
+                    // Styles : fond bleu, texte blanc, plein largeur, tactile
+                    $btn.css({
+                        'background-color': '#1E88E5',
+                        'color': '#ffffff',
+                        'width': '100%',
+                        'font-size': '16px',
+                        'padding': '12px 14px',
+                        'border-radius': '8px',
+                        'box-shadow': '0 2px 6px rgba(0,0,0,0.12)',
+                        'display': 'flex',
+                        'align-items': 'center',
+                        'justify-content': 'center',
+                        'gap': '8px',
+                        'white-space': 'normal',
+                        'text-align': 'left'
+                    });
+
+                    // Ajuster pour très petits écrans
+                    if (window.matchMedia && window.matchMedia('(max-width: 480px)').matches) {
+                        $btn.css({'font-size': '18px', 'padding': '14px 16px'});
+                    }
+                };
+
+                // Si on a un lien Address, récupérer les champs détaillés pour composer l'adresse
+                if (frm.doc.address) {
+                    frappe.db.get_value("Address", frm.doc.address, ["address_line1", "address_line2", "city", "pincode"])
+                        .then((r) => {
+                            const a = (r && r.message) || {};
+                            const parts = [];
+                            if (a.address_line1) parts.push(a.address_line1);
+                            if (a.address_line2) parts.push(a.address_line2);
+                            if (a.city) parts.push(a.city);
+                            if (a.pincode) parts.push(a.pincode);
+                            const display = parts.join(", ") || frm.doc.address_display || frm.doc.address;
+                            applyStyles(display);
+                        }).catch(() => {
+                            applyStyles(frm.doc.address_display || frm.doc.address);
+                        });
+                } else {
+                    // Fallback : address_display ou valeur brute
+                    applyStyles(frm.doc.address_display || frm.doc.address);
+                }
+            } catch (e) {
+                console.warn('Enhance Open In Maps button failed', e);
+            }
+        };
+
+        // Exécuter après un court délai pour s'assurer que le champ a été rendu
+        setTimeout(enhanceOpenInMapsButton, 50);
+
+        // ...existing code...
   },
   address:function(frm) {
       frappe.contacts.get_address_display(frm)
@@ -123,7 +188,39 @@ frappe.ui.form.on('Visite Technique', {
         })
     })
 */
-  }
+  },
+    // Ajout : ouvrir l'adresse dans Google Maps quand on clique sur le bouton "open_in_google_maps"
+    open_in_google_maps: function(frm) {
+        // Si un enregistrement Address est lié, récupérer les champs individuels
+        if (frm.doc.address) {
+            frappe.db
+                .get_value("Address", frm.doc.address, ["address_line1", "address_line2", "city", "pincode"])
+                .then((r) => {
+                    const a = r.message || {};
+                    const parts = [];
+                    if (a.address_line1) parts.push(a.address_line1);
+                    if (a.address_line2) parts.push(a.address_line2);
+                    if (a.city) parts.push(a.city);
+                    if (a.pincode) parts.push(a.pincode);
+                    const query = parts.join(", ") || frm.doc.address_display || frm.doc.address;
+                    if (query) {
+                        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+                        window.open(url, "_blank");
+                    } else {
+                        frappe.msgprint(__('Adresse non renseignée'));
+                    }
+                });
+        } else {
+            // Fallback sur address_display ou valeur brute
+            const query = frm.doc.address_display || frm.doc.address;
+            if (query) {
+                const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+                window.open(url, "_blank");
+            } else {
+                frappe.msgprint(__('Adresse non renseignée'));
+            }
+        }
+    }
 });
 
 Object.assign(frappe.listview_settings['Visite Technique'] = {
