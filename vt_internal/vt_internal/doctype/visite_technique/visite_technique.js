@@ -146,14 +146,13 @@ frappe.ui.form.on('Visite Technique', {
                             if (a.address_line2) parts.push(a.address_line2);
                             if (a.city) parts.push(a.city);
                             if (a.pincode) parts.push(a.pincode);
-                            const display = parts.join(", ") || frm.doc.address_display || frm.doc.address;
+                            const display = parts.join(", ") || frm.doc.address;
                             applyStyles(display);
                         }).catch(() => {
-                            applyStyles(frm.doc.address_display || frm.doc.address);
+                            applyStyles(frm.doc.address);
                         });
                 } else {
-                    // Fallback : address_display ou valeur brute
-                    applyStyles(frm.doc.address_display || frm.doc.address);
+                    applyStyles(frm.doc.address);
                 }
             } catch (e) {
                 console.warn('Enhance Open In Maps button failed', e);
@@ -164,9 +163,6 @@ frappe.ui.form.on('Visite Technique', {
         setTimeout(enhanceOpenInMapsButton, 50);
 
         // ...existing code...
-  },
-  address:function(frm) {
-      frappe.contacts.get_address_display(frm)
   },
   client: function(frm) {
     frm.set_query("contact", function(){
@@ -202,7 +198,7 @@ frappe.ui.form.on('Visite Technique', {
                     if (a.address_line2) parts.push(a.address_line2);
                     if (a.city) parts.push(a.city);
                     if (a.pincode) parts.push(a.pincode);
-                    const query = parts.join(", ") || frm.doc.address_display || frm.doc.address;
+                    const query = parts.join(", ") || frm.doc.address;
                     if (query) {
                         const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
                         window.open(url, "_blank");
@@ -212,7 +208,7 @@ frappe.ui.form.on('Visite Technique', {
                 });
         } else {
             // Fallback sur address_display ou valeur brute
-            const query = frm.doc.address_display || frm.doc.address;
+            const query = frm.doc.address;
             if (query) {
                 const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
                 window.open(url, "_blank");
