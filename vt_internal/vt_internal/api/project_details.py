@@ -18,8 +18,8 @@ def project_details():
             FROM `tabSales Order Item` soi
             INNER JOIN `tabSales Order` so ON so.name = soi.parent
             INNER JOIN `tabItem` i ON i.name = soi.item_code
-            WHERE so.project = %s AND so.docstatus = 1 {condition}
-            AND product_bundle_name IS NULL
+            WHERE so.project = %s AND so.docstatus = 1 AND so.custom_exclude_from_statistics != 1 {condition}
+            AND (product_bundle_name IS NULL OR product_bundle_name = '')
         """.format(condition=condition)
         result_non_bundle = frappe.db.sql(sql_non_bundle, project_id, as_dict=1)[0]
         vente_non_bundle = result_non_bundle.vente or 0
@@ -31,7 +31,7 @@ def project_details():
             FROM `tabPacked Item` pi
             INNER JOIN `tabSales Order` so ON so.name = pi.parent
             INNER JOIN `tabItem` i ON i.name = pi.item_code
-            WHERE so.project = %s AND so.docstatus = 1 {condition}
+            WHERE so.project = %s AND so.docstatus = 1 AND so.custom_exclude_from_statistics != 1 {condition}
         """.format(condition=condition)
         result_packed = frappe.db.sql(sql_packed, project_id, as_dict=1)[0]
         vente_packed = result_packed.vente or 0
@@ -228,7 +228,7 @@ def project_details():
 
     def get_sales_orders(project_id):
         sos = frappe.db.get_list('Sales Order',
-            filters={'project': project_id, 'docstatus': ['!=', 2]},
+            filters={'project': project_id, 'docstatus': ['!=', 2], 'custom_exclude_from_statistics': ['!=', 1]},
             fields=["name", "status", "grand_total", "total", "transaction_date", "markup_percentage", "custom_labour_hours"]
         )
         items = [{

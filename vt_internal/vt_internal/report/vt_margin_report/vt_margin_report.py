@@ -399,6 +399,7 @@ def get_theoretical(project, analysis_axis):
         INNER JOIN `tabItem` i ON i.name = soi.item_code
         WHERE so.project = %(project)s
         AND so.docstatus = 1
+        AND so.custom_exclude_from_statistics != 1
         AND soi.product_bundle_name IS NULL
         {item_group_condition}
     """, params, as_dict=1)[0]
@@ -413,6 +414,7 @@ def get_theoretical(project, analysis_axis):
         INNER JOIN `tabItem` i ON i.name = pi.item_code
         WHERE so.project = %(project)s
         AND so.docstatus = 1
+        AND so.custom_exclude_from_statistics != 1
         {item_group_condition}
     """, params, as_dict=1)[0]
 

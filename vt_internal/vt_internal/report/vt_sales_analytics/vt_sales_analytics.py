@@ -216,6 +216,7 @@ class Analytics(object):
             "docstatus": 1,
             "company": self.filters.company,
             self.date_field: ("between", [self.filters.from_date, self.filters.to_date]),
+            "custom_exclude_from_statistics": ["!=", 1],
         }
         if self.filters.get("secteur"):
             filters["secteur_vt"] = self.filters.secteur
@@ -232,6 +233,7 @@ class Analytics(object):
         cost_center_filter = ""
         insurance_filter = ""
         responsable_filter = ""
+        exclude_filter = f" and {alias}.custom_exclude_from_statistics != 1"
         params = [self.filters.company, self.filters.from_date, self.filters.to_date]
 
         if self.filters.get("secteur"):
@@ -247,7 +249,7 @@ class Analytics(object):
             responsable_filter = f" and {alias}.custom_responsable_du_devis = %s"
             params.append(self.filters.custom_responsable_du_devis)
 
-        return secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params
+        return secteur_filter, cost_center_filter, insurance_filter, responsable_filter, exclude_filter, params
 
     # -- Secteur (hiérarchique) via get_all
     def get_sales_transactions_based_on_secteur(self):
@@ -276,7 +278,7 @@ class Analytics(object):
     # -- Order Type (SQL)
     def get_sales_transactions_based_on_order_type(self):
         value_field = "base_net_total" if self.filters["value_quantity"] == "Value" else "total_qty"
-        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params = self._common_sql_filters("s")
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, exclude_filter, params = self._common_sql_filters("s")
         col_select, _, _, _ = self.get_col_entity_select("s", item_alias="i")
 
         select_col = f", {col_select}" if (col_select and self.column_by != "Période") else ""
@@ -287,7 +289,7 @@ class Analytics(object):
             select s.order_type as entity, s.{value_field} as value_field{date_select}{select_col}
             from `tabSales Order` s
             where s.docstatus = 1 and s.company = %s and s.{self.date_field} between %s and %s
-              and ifnull(s.order_type, '') != ''{secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
+              and ifnull(s.order_type, '') != ''{secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}{exclude_filter}
             order by s.order_type
             """,
             tuple(params),
@@ -298,7 +300,7 @@ class Analytics(object):
     # -- Origine (SQL)
     def get_sales_transactions_based_on_origine(self):
         value_field = "SUM(i.base_net_amount)" if self.filters["value_quantity"] == "Value" else "COUNT(DISTINCT s.name)"
-        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params = self._common_sql_filters("s")
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, exclude_filter, params = self._common_sql_filters("s")
         # colonne dynamique éventuelle
         col_select, _, _, _ = self.get_col_entity_select("s", item_alias="i")
         select_col = f", {col_select}" if (col_select and self.column_by != "Période") else ""
@@ -315,7 +317,7 @@ class Analytics(object):
             join `tabSales Order` s on s.name = i.parent
             where s.docstatus = 1 and s.company = %s
               and s.{self.date_field} between %s and %s
-              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
+              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}{exclude_filter}
             group by entity{', s.' + self.date_field if self.column_by == 'Période' else ''}{', col_entity' if (self.column_by != 'Période' and select_col) else ''}
             """,
             tuple(params),
@@ -325,7 +327,7 @@ class Analytics(object):
     # -- Assurance (SQL)
     def get_sales_transactions_based_on_assurance(self):
         value_field = "SUM(s.base_net_total)" if self.filters["value_quantity"] == "Value" else "COUNT(DISTINCT s.name)"
-        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params = self._common_sql_filters("s")
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, exclude_filter, params = self._common_sql_filters("s")
         col_select, _, _, _ = self.get_col_entity_select("s", item_alias="i")
         select_col = f", {col_select}" if (col_select and self.column_by != "Période") else ""
         date_select = f", s.{self.date_field}" if self.column_by == "Période" else ""
@@ -335,7 +337,7 @@ class Analytics(object):
             select s.custom_insurance_client as entity, {value_field} as value_field{date_select}{select_col}
             from `tabSales Order` s
             where s.docstatus = 1 and s.company = %s and s.{self.date_field} between %s and %s
-              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
+              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}{exclude_filter}
             group by entity{', s.' + self.date_field if self.column_by == 'Période' else ''}{', col_entity' if (self.column_by != 'Période' and select_col) else ''}
             """,
             tuple(params),
@@ -371,7 +373,7 @@ class Analytics(object):
     # -- Items (SQL)
     def get_sales_transactions_based_on_items(self):
         value_field = "base_net_amount" if self.filters["value_quantity"] == "Value" else "stock_qty"
-        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params = self._common_sql_filters("s")
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, exclude_filter, params = self._common_sql_filters("s")
         col_select, _, _, _ = self.get_col_entity_select("s", item_alias="i")
         select_col = f", {col_select}" if (col_select and self.column_by != "Période") else ""
         date_select = f", s.{self.date_field}" if self.column_by == "Période" else ""
@@ -384,7 +386,7 @@ class Analytics(object):
             join `tabSales Order` s on s.name = i.parent
             where i.docstatus = 1 and s.company = %s
               and s.{self.date_field} between %s and %s
-              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
+              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}{exclude_filter}
             """,
             tuple(params),
             as_dict=1,
@@ -421,7 +423,7 @@ class Analytics(object):
     # -- Item Group (SQL)
     def get_sales_transactions_based_on_item_group(self):
         value_field = "base_net_amount" if self.filters["value_quantity"] == "Value" else "qty"
-        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params = self._common_sql_filters("s")
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, exclude_filter, params = self._common_sql_filters("s")
         col_select, _, _, _ = self.get_col_entity_select("s", item_alias="i")
         select_col = f", {col_select}" if (col_select and self.column_by != "Période") else ""
         date_select = f", s.{self.date_field}" if self.column_by == "Période" else ""
@@ -433,7 +435,7 @@ class Analytics(object):
             join `tabSales Order` s on s.name = i.parent
             where i.docstatus = 1 and s.company = %s
               and s.{self.date_field} between %s and %s
-              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
+              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}{exclude_filter}
             """,
             tuple(params),
             as_dict=1,
@@ -481,7 +483,7 @@ class Analytics(object):
         else:
             value_field = "SUM((bom.hauteur / 1000) * (bom.largeur / 1000)) AS value_field"
 
-        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, params = self._common_sql_filters("so")
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, exclude_filter, params = self._common_sql_filters("so")
         col_select, _, _, _ = self.get_col_entity_select("so", item_alias="soi")
         select_col = f", {col_select}" if (col_select and self.column_by != "Période") else ""
         date_select = f", so.{self.date_field}" if self.column_by == "Période" else ""
@@ -506,7 +508,7 @@ class Analytics(object):
               AND soi.item_code IN ('Produit fini (double vitrage)', 'Produit fini (verre)')
               AND so.company = %s
               AND so.{self.date_field} BETWEEN %s AND %s
-              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}
+              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}{exclude_filter}
             GROUP BY entity{', so.' + self.date_field if self.column_by == 'Période' else ''}{', col_entity' if (self.column_by != 'Période' and select_col) else ''}
             """,
             tuple(params),
