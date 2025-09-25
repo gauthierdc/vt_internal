@@ -147,6 +147,7 @@ def get_data(filters):
         SELECT 
             q.name AS quotation,
             q.party_name AS client,
+            c.customer_group,
             q.company,
             q.cost_center,
             q.transaction_date,
@@ -159,6 +160,7 @@ def get_data(filters):
             q.custom_dernier_statut_de_suivi,
             q.status
         FROM `tabQuotation` q
+        LEFT JOIN `tabCustomer` c ON c.name = q.party_name
         WHERE q.docstatus <> 2 AND {conditions}
     """.format(conditions=" AND ".join(conditions)), params, as_dict=1)
 
@@ -363,6 +365,10 @@ def get_conditions(filters):
         conditions.append("q.cost_center IN %(cost_centers)s")
         params["cost_centers"] = centers
 
+    if filters.get("customer_group"):
+        conditions.append("c.customer_group = %(customer_group)s")
+        params["customer_group"] = filters["customer_group"]
+
     return conditions, params
 
 def get_period_key(trans_date, range_type):
@@ -391,6 +397,8 @@ def get_group_value(grouped_by, quot):
         return quot["type_de_projet"] or ""
     elif grouped_by == "Responsable du devis":
         return quot["responsable_du_devis"] or ""
+    elif grouped_by == "Groupe de client":
+        return quot["customer_group"] or ""
     elif grouped_by == "Statut de suivi":
         if quot.status in ["Ordered", "Partially Ordered"]:
             return "Commandé"
@@ -410,6 +418,8 @@ def get_fieldname(grouped_by):
         return "type_de_projet"
     elif grouped_by == "Responsable du devis":
         return "responsable_du_devis"
+    elif grouped_by == "Groupe de client":
+        return "customer_group"
     elif grouped_by == "Statut de suivi":
         return "custom_dernier_statut_de_suivi"
 
@@ -426,5 +436,7 @@ def get_options(grouped_by):
         return "Project Type"
     elif grouped_by == "Responsable du devis":
         return "User"
+    elif grouped_by == "Groupe de client":
+        return "Customer Group"
     elif grouped_by == "Statut de suivi":
         return ""
