@@ -19,7 +19,8 @@ def execute(filters: dict | None = None):
 	# Compute total HT for report summary
 	total_ht = sum(row[7] for row in data)
 	report_summary = [
-		{ "value": total_ht, "label": _("Total HT"), "datatype": "Currency"}
+		{ "value": len(data), "label": _("Nombre de commande"), "datatype": "Int" },
+		{ "value": total_ht, "label": _("Total HT"), "datatype": "Currency" }
 	]
 	return columns, data, None, None, report_summary
 
