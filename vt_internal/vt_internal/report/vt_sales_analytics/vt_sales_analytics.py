@@ -202,6 +202,9 @@ class Analytics(object):
         elif self.filters.tree_type == "Assurance":
             self.get_sales_transactions_based_on_assurance()
             self.get_rows_or_groups()
+        elif self.filters.tree_type == "Cost Center":
+            self.get_sales_transactions_based_on_cost_center()
+            self.get_rows_or_groups()
         elif self.filters.tree_type == "Project":
             self.get_sales_transactions_based_on_project()
             self.get_rows_or_groups()
@@ -343,6 +346,26 @@ class Analytics(object):
             tuple(params),
             as_dict=1,
         )
+        
+    # -- Cost Center (SQL)
+    def get_sales_transactions_based_on_cost_center(self):
+        # Fetch sales grouped by Cost Center
+        value_field = "SUM(s.base_net_total)" if self.filters["value_quantity"] == "Value" else "SUM(s.total_qty)"
+        secteur_filter, cost_center_filter, insurance_filter, responsable_filter, exclude_filter, params = self._common_sql_filters("s")
+        date_select = f", s.{self.date_field}" if self.column_by == "Période" else ""
+        
+        self.entries = frappe.db.sql(
+            f"""
+            select s.cost_center as entity, {value_field} as value_field{date_select}
+            from `tabSales Order` s
+            where s.docstatus = 1 and s.company = %s and s.{self.date_field} between %s and %s
+              {secteur_filter}{cost_center_filter}{insurance_filter}{responsable_filter}{exclude_filter}
+            group by entity{', s.' + self.date_field if self.column_by == 'Période' else ''}
+            """,
+            tuple(params),
+            as_dict=1,
+        )
+
 
     # -- Customer / Supplier (get_all)
     def get_sales_transactions_based_on_customers_or_suppliers(self):
