@@ -16,11 +16,11 @@ def execute(filters: dict | None = None):
 	"""
 	columns = get_columns()
 	data = get_data(filters)
-	# Compute total HT for report summary
-	total_ht = sum(row[7] for row in data)
+	# Compute remaining amount (HT) for report summary
+	remaining_ht = sum(row[9] for row in data)
 	report_summary = [
 		{ "value": len(data), "label": _("Nombre de commande"), "datatype": "Int" },
-		{ "value": total_ht, "label": _("Total HT"), "datatype": "Currency" }
+		{ "value": remaining_ht, "label": _("Reste à facturer (HT)"), "datatype": "Currency" }
 	]
 	return columns, data, None, None, report_summary
 
@@ -37,15 +37,20 @@ def get_columns() -> list[dict]:
 		{"label": _("Responsable du devis"),   "fieldname": "custom_responsable_du_devis", "fieldtype": "Link", "options": "User", "width": 150},
 		{"label": _("Total (HT)"),             "fieldname": "total",              "fieldtype": "Currency", "options": "currency", "width": 120},
 		{"label": _("Pourcentage facturé"),    "fieldname": "per_billed",         "fieldtype": "Percent",  "width": 100},
-		{"label": _("Montant restant (HT)"),   "fieldname": "remaining_amount",   "fieldtype": "Currency", "options": "currency","width": 150},
+		{"label": _("Reste à facturer (HT)"),  "fieldname": "remaining_amount",   "fieldtype": "Currency", "options": "currency", "width": 150},
 	]
 
 
 def get_data(filters: dict | None = None) -> list[list]:
 	"""Return data for the report, applying the selected filters and computing age and remaining amount."""
 	filters = filters or {}
-	# Always exclude closed orders and orders fully billed
-	filters.update({"status": ["!=" , "Closed"], "per_billed": ["<", 100]})
+	# Always exclude closed orders, cancelled orders, fully billed orders and excluded from statistics
+	filters.update({
+		"status": ["!=" , "Closed"],
+		"per_billed": ["<", 100],
+		"docstatus": ["!=" , 2],
+		"custom_exclude_from_statistics": ["!=" , 1]
+	})
 	orders = frappe.get_all(
 		"Sales Order",
 		fields=["name", "status", "transaction_date", "delivery_date",
