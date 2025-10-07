@@ -6,7 +6,7 @@ frappe.query_reports["Order book"] = {
     filters: [
         // Standard filters (status and per_billed handled server-side)
         ...frappe.get_meta("Sales Order").fields
-            .filter(df => df.in_standard_filter && df.fieldname !== "status")
+            .filter(df => df.in_standard_filter && df.fieldname !== "status" && df.fieldname !== "transaction_date")
             .map(df => ({
                 fieldname: df.fieldname,
                 label: __(df.label),
