@@ -17,7 +17,7 @@ def execute(filters: dict | None = None):
 	columns = get_columns()
 	data = get_data(filters)
 	# Compute remaining amount (HT) for report summary
-	remaining_ht = sum(row[9] for row in data)
+	remaining_ht = sum(row[10] for row in data)
 	report_summary = [
 		{ "value": len(data), "label": _("Nombre de commande"), "datatype": "Int" },
 		{ "value": remaining_ht, "label": _("Reste à facturer (HT)"), "datatype": "Currency" }
@@ -29,9 +29,10 @@ def get_columns() -> list[dict]:
 	"""Return columns for the report."""
 	return [
 		{"label": _("Désignation"),            "fieldname": "name",               "fieldtype": "Link",     "options": "Sales Order", "width": 150},
+		{"label": _("Client"),                 "fieldname": "customer_name",      "fieldtype": "Data",     "width": 180},
 		{"label": _("Statut"),                 "fieldname": "status",             "fieldtype": "Data",     "width": 120},
 		{"label": _("Date"),                   "fieldname": "transaction_date",   "fieldtype": "Date",     "width": 100},
-		{"label": _("Age"),                    "fieldname": "age",                "fieldtype": "Int",      "width": 80},
+		{"label": _("Age (J)"),                    "fieldname": "age",                "fieldtype": "Int",      "width": 80},
 		{"label": _("Date de livraison"),      "fieldname": "delivery_date",      "fieldtype": "Date",     "width": 100},
 		{"label": _("Référence pièce"),        "fieldname": "reference_piece",              "fieldtype": "Data",     "width": 120},
 		{"label": _("Responsable du devis"),   "fieldname": "custom_responsable_du_devis", "fieldtype": "Link", "options": "User", "width": 150},
@@ -53,7 +54,7 @@ def get_data(filters: dict | None = None) -> list[list]:
 	})
 	orders = frappe.get_all(
 		"Sales Order",
-		fields=["name", "status", "transaction_date", "delivery_date",
+		fields=["name", "customer", "status", "transaction_date", "delivery_date",
 				"reference_piece", "custom_responsable_du_devis", "total", "per_billed"],
 		filters=filters,
 		order_by="transaction_date desc"
@@ -68,6 +69,7 @@ def get_data(filters: dict | None = None) -> list[list]:
 		remaining = total - (total * per_billed / 100)
 		data.append([
 			order.get("name"),
+			order.get("customer"),
 			_(order.get("status")),
 			txn_date,
 			age,
