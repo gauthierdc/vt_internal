@@ -4,6 +4,13 @@
 // ...existing code...
 frappe.query_reports["Order book"] = {
     filters: [
+        // Explicit Cost Center filter
+        {
+            fieldname: "cost_center",
+            label: __("Centre de coût"),
+            fieldtype: "Link",
+            options: "Cost Center"
+        },
         // Standard filters (status and per_billed handled server-side)
         ...frappe.get_meta("Sales Order").fields
             .filter(df => df.in_standard_filter && df.fieldname !== "status" && df.fieldname !== "transaction_date")

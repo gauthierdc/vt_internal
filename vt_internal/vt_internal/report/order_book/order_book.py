@@ -44,9 +44,14 @@ def get_columns() -> list[dict]:
 
 def get_data(filters: dict | None = None) -> list[list]:
 	"""Return data for the report, applying the selected filters and computing age and remaining amount."""
-	filters = filters or {}
+	query_filters = filters or {}
+
+	# Handle cost_center filter with descendants operator
+	if query_filters.get("cost_center"):
+		query_filters["cost_center"] = ["descendants of (inclusive)", query_filters["cost_center"]]
+
 	# Always exclude closed orders, cancelled orders, fully billed orders and excluded from statistics
-	filters.update({
+	query_filters.update({
 		"status": ["!=" , "Closed"],
 		"per_billed": ["<", 100],
 		"docstatus": ["!=" , 2],
@@ -56,7 +61,7 @@ def get_data(filters: dict | None = None) -> list[list]:
 		"Sales Order",
 		fields=["name", "customer", "status", "transaction_date", "delivery_date",
 				"reference_piece", "custom_responsable_du_devis", "total", "per_billed"],
-		filters=filters,
+		filters=query_filters,
 		order_by="transaction_date desc"
 	)
 	today = getdate(nowdate())
