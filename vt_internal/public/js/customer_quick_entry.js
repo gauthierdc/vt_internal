@@ -118,8 +118,6 @@
 					// Setup Google Places Autocomplete if available
 					this.dialog.on_page_show = () => {
 						me.setup_gmaps_autocomplete();
-						// Ensure required flags are correct on load
-						me.enforce_address_requirements();
 						// Default country if available from system defaults
 						const sys_country = frappe.boot?.sysdefaults?.country;
 						if (sys_country) {
@@ -127,23 +125,10 @@
 						}
 					};
 
-					// Dynamically require city, pincode and country when address_line1 is filled
-					const line1_ctrl = this.dialog.get_field("address_line1");
-					if (line1_ctrl && line1_ctrl.$input) {
-						line1_ctrl.$input.on("input", () => this.enforce_address_requirements());
-					}
-
 					// Clean up global quick entry reference when closed
 					this.dialog.onhide = () => (frappe.quick_entry = null);
 
-				
-				enforce_address_requirements() {
-					const has_line1 = !!(this.dialog.get_value("address_line1") || "").trim();
-					["city", "pincode", "country"].forEach((fn) => {
-						this.dialog.set_df_property(fn, "reqd", has_line1 ? 1 : 0);
-					});
-				}
-
+					this.dialog.show();
 				}
 
 				async handle_save() {
@@ -259,7 +244,7 @@
 								fields: ["address_components", "formatted_address"],
 							});
 
-								autocomplete.addListener("place_changed", () => {
+							autocomplete.addListener("place_changed", () => {
 								const place = autocomplete.getPlace();
 								if (!place || !place.address_components) return;
 								
@@ -289,8 +274,6 @@
 								this.dialog.set_value("city", city);
 								this.dialog.set_value("pincode", pincode);
 								if (country) this.dialog.set_value("country", country);
-									// Enforce required fields when address_line1 is populated by autocomplete
-									this.enforce_address_requirements();
 							});
 						} catch (err) {
 							// ignore autocomplete errors
