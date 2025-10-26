@@ -57,7 +57,7 @@ def get_data(filters: dict | None = None) -> list[list]:
 		"docstatus": ["!=" , 2],
 		"custom_exclude_from_statistics": ["!=" , 1]
 	})
-	orders = frappe.get_all(
+	orders = frappe.get_list(
 		"Sales Order",
 		fields=["name", "customer", "status", "transaction_date", "delivery_date",
 				"reference_piece", "custom_responsable_du_devis", "total", "per_billed"],
