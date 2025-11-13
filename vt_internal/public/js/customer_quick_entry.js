@@ -160,10 +160,9 @@
 						// Create Address if any address field is provided
 						const has_address = [
 							"address_line1",
-							"address_line2",
 							"city",
 							"pincode",
-						].some((k) => !!values[k]);
+						].every((k) => !!values[k]);
 
 						if (has_address) {
 							const address_doc = {
