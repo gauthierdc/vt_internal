@@ -30,7 +30,7 @@
   {
    "fieldname": "label_printer",
    "fieldtype": "Link",
-   "label": "Label printer",
+   "label": "Label Printer",
    "options": "Label Printer"
   }
  ],
