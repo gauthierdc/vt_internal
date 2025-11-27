@@ -1,45 +1,10 @@
 import frappe
 from frappe import _
 
+from vt_internal.vt_internal.utils.margin_utils import get_theoretical, get_project_costs, calculate_margin
+
 @frappe.whitelist(allow_guest=True)
 def project_details():
-    # Logique pour créer un client
-    def get_theoretical(project_id, axis):
-        condition = ""
-        if axis == "Temps passé":
-            condition = "AND i.custom_pose_vt = 1"
-        elif axis == "Achats":
-            condition = "AND (i.custom_pose_vt = 0 OR i.custom_pose_vt IS NULL)"
-        # For "global", condition remains empty
-
-        # Query for non-bundle items
-        sql_non_bundle = """
-            SELECT SUM(soi.amount) AS vente, SUM(soi.qty * COALESCE(soi.base_unit_cost_price, 0)) AS cost
-            FROM `tabSales Order Item` soi
-            INNER JOIN `tabSales Order` so ON so.name = soi.parent
-            INNER JOIN `tabItem` i ON i.name = soi.item_code
-            WHERE so.project = %s AND so.docstatus = 1 AND so.custom_exclude_from_statistics != 1 {condition}
-            AND (product_bundle_name IS NULL OR product_bundle_name = '')
-        """.format(condition=condition)
-        result_non_bundle = frappe.db.sql(sql_non_bundle, project_id, as_dict=1)[0]
-        vente_non_bundle = result_non_bundle.vente or 0
-        cost_non_bundle = result_non_bundle.cost or 0
-
-        # Query for packed items (components of bundles)
-        sql_packed = """
-            SELECT SUM(pi.qty * pi.rate) AS vente, SUM(pi.qty * COALESCE(pi.base_unit_cost_price, 0)) AS cost
-            FROM `tabPacked Item` pi
-            INNER JOIN `tabSales Order` so ON so.name = pi.parent
-            INNER JOIN `tabItem` i ON i.name = pi.item_code
-            WHERE so.project = %s AND so.docstatus = 1 AND so.custom_exclude_from_statistics != 1 {condition}
-        """.format(condition=condition)
-        result_packed = frappe.db.sql(sql_packed, project_id, as_dict=1)[0]
-        vente_packed = result_packed.vente or 0
-        cost_packed = result_packed.cost or 0
-
-        vente = vente_non_bundle + vente_packed
-        cost = cost_non_bundle + cost_packed
-        return vente, cost
 
     def get_expenses(project_id):
         es = frappe.db.get_list('Expense',
@@ -253,8 +218,8 @@ def project_details():
     theo_vente_global, theo_cost_global = get_theoretical(project_id, "global")
     theo_vente_tp, theo_cost_tp = get_theoretical(project_id, "Temps passé")
     theo_vente_ach, theo_cost_ach = get_theoretical(project_id, "Achats")
-    theoretical_margin = int((theo_vente_global - theo_cost_global) / theo_vente_global * 100 if theo_vente_global else 0)
-    theo_margin_ach = int((theo_vente_ach - theo_cost_ach) / theo_vente_ach * 100 if theo_vente_ach else 0)
+    theoretical_margin = round(calculate_margin(theo_vente_global, theo_cost_global))
+    theo_margin_ach = round(calculate_margin(theo_vente_ach, theo_cost_ach))
     items = []
     items.extend(get_expenses(project_id))
     items.extend(get_payment_entries(project_id))
@@ -285,9 +250,9 @@ def project_details():
     total_purchases = total_purchase_order + project.total_expense_claim
     total_expenses = total_purchases + project.total_costing_amount + total_manufacturing_cost
     real_cost_ach = total_purchases + total_manufacturing_cost
-    real_margin_ach = int((theo_vente_ach - real_cost_ach) / theo_vente_ach * 100 if theo_vente_ach else 0)
+    real_margin_ach = round(calculate_margin(theo_vente_ach, real_cost_ach))
     vente = theo_vente_global or project.total_sales_amount
-    real_margin = int((vente - total_expenses) / vente * 100 if vente else 0)
+    real_margin = round(calculate_margin(vente, total_expenses))
     real_margin_color = "success" if real_margin >= theoretical_margin else "warning" if real_margin > (theoretical_margin - 7) else "danger"
     ach_margin_color = "success" if real_margin_ach >= theo_margin_ach else "warning" if real_margin_ach > (theo_margin_ach - 7) else "danger"
     time_spent_color = "success" if time_spent <= labour_hours else "warning" if time_spent < labour_hours * 1.1 else "danger"

@@ -5,6 +5,8 @@ from collections import defaultdict
 from datetime import date
 from dateutil.relativedelta import relativedelta
 
+from vt_internal.vt_internal.utils.margin_utils import get_theoretical
+
 def execute(filters=None):
     if not filters:
         filters = {}
@@ -379,46 +381,3 @@ def get_options(grouped_by):
         return "Project Type"
     elif grouped_by == "Secteur VT":
         return "Secteur VT"
-
-def get_theoretical(project, analysis_axis):
-    params = {"project": project}
-    item_group_condition = ""
-
-    if analysis_axis == "Temps passé":
-        item_group_condition = "AND i.custom_pose_vt = 1"
-    elif analysis_axis == "Achats":
-        item_group_condition = "AND NOT i.custom_pose_vt = 1"
-
-    # Récupération des ventes et coûts des lignes NON bundles
-    regular_items = frappe.db.sql(f"""
-        SELECT 
-            SUM(soi.amount) AS vente,
-            SUM(soi.qty * COALESCE(soi.base_unit_cost_price, 0)) AS cost
-        FROM `tabSales Order Item` soi
-        INNER JOIN `tabSales Order` so ON so.name = soi.parent
-        INNER JOIN `tabItem` i ON i.name = soi.item_code
-        WHERE so.project = %(project)s
-        AND so.docstatus = 1
-        AND so.custom_exclude_from_statistics != 1
-        AND soi.product_bundle_name IS NULL
-        {item_group_condition}
-    """, params, as_dict=1)[0]
-
-    # Récupération des packed_items (enfants des bundles)
-    packed_items = frappe.db.sql(f"""
-        SELECT 
-            SUM(pi.qty * pi.rate) AS vente,
-            SUM(pi.qty * COALESCE(pi.base_unit_cost_price, 0)) AS cost
-        FROM `tabPacked Item` pi
-        INNER JOIN `tabSales Order` so ON so.name = pi.parent AND pi.parenttype = 'Sales Order'
-        INNER JOIN `tabItem` i ON i.name = pi.item_code
-        WHERE so.project = %(project)s
-        AND so.docstatus = 1
-        AND so.custom_exclude_from_statistics != 1
-        {item_group_condition}
-    """, params, as_dict=1)[0]
-
-    total_vente = (regular_items.vente or 0) + (packed_items.vente or 0)
-    total_cost = (regular_items.cost or 0) + (packed_items.cost or 0)
-
-    return total_vente, total_cost
