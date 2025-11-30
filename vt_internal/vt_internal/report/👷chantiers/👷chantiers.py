@@ -52,34 +52,49 @@ def execute(filters: dict | None = None):
 
 	tss = frappe.db.sql(sql, tuple(params), as_dict=True)
 
-	# Frais généraux (not project)
-	where_not = ["t.docstatus != 2"]
-	params_not: list = []
+	# Heures sans projet, groupées par type d'activité (excluant Fabrication)
+	where_no_project = ["t.docstatus != 2", "(d.project IS NULL OR d.project = '')", "COALESCE(d.activity_type, '') != 'Fabrication'"]
+	params_no_project: list = []
 	if company_filter:
-		where_not.append("t.company = %s")
-		params_not.append(company_filter)
-	where_not.append("t.end_date BETWEEN %s AND %s")
-	params_not.extend([start_date, end_date])
+		where_no_project.append("t.company = %s")
+		params_no_project.append(company_filter)
+	where_no_project.append("t.end_date BETWEEN %s AND %s")
+	params_no_project.extend([start_date, end_date])
 
-	sql_vt = f"""
+	sql_no_project = f"""
+		SELECT
+			COALESCE(d.activity_type, 'Non défini') AS activity_type,
+			SUM(d.hours) AS hours
+		FROM `tabTimesheet` t
+		JOIN `tabTimesheet Detail` d ON d.parent = t.name
+		WHERE {' AND '.join(where_no_project)}
+		GROUP BY d.activity_type
+		ORDER BY hours DESC
+	"""
+	hours_by_activity = frappe.db.sql(sql_no_project, tuple(params_no_project), as_dict=True)
+	total_hours_no_project = round(sum([(r.get('hours') or 0) for r in hours_by_activity]))
+
+	# Total heures sur chantiers (excluant Fabrication) pour calcul du pourcentage
+	where_on_project = ["t.docstatus != 2", "d.project IS NOT NULL", "d.project != ''", "COALESCE(d.activity_type, '') != 'Fabrication'"]
+	params_on_project: list = []
+	if company_filter:
+		where_on_project.append("t.company = %s")
+		params_on_project.append(company_filter)
+	where_on_project.append("t.end_date BETWEEN %s AND %s")
+	params_on_project.extend([start_date, end_date])
+
+	sql_on_project = f"""
 		SELECT SUM(d.hours) AS hours
 		FROM `tabTimesheet` t
 		JOIN `tabTimesheet Detail` d ON d.parent = t.name
-		WHERE {' AND '.join(where_not)} AND d.activity_type = %s
+		WHERE {' AND '.join(where_on_project)}
 	"""
-	vt_rows = frappe.db.sql(sql_vt, tuple([*params_not, 'Visite technique']), as_dict=True)
-	vt_hours = round(sum([(r.get('hours') or 0) for r in vt_rows]))
+	hours_on_project_result = frappe.db.sql(sql_on_project, tuple(params_on_project), as_dict=True)
+	total_hours_on_project = round(hours_on_project_result[0].get('hours') or 0) if hours_on_project_result else 0
 
-	sql_at = f"""
-		SELECT SUM(d.hours) AS hours
-		FROM `tabTimesheet` t
-		JOIN `tabTimesheet Detail` d ON d.parent = t.name
-		WHERE {' AND '.join(where_not)} AND d.activity_type = %s
-	"""
-	at_rows = frappe.db.sql(sql_at, tuple([*params_not, 'Atelier']), as_dict=True)
-	at_hours = round(sum([(r.get('hours') or 0) for r in at_rows]))
-
-	frais_generaux_hours = at_hours + vt_hours
+	# Pourcentage heures chantier
+	total_hours_all = total_hours_on_project + total_hours_no_project
+	pct_chantier = round(total_hours_on_project / total_hours_all * 100) if total_hours_all > 0 else 0
 
 	columns = [
 		"Client::200",
@@ -98,14 +113,15 @@ def execute(filters: dict | None = None):
 	total_ca = 0
 	
 	# Compteurs pour le header
-	nb_chantiers_factures_periode = 0  # Chantiers dont date de fin est dans la période
-	nb_chantiers_en_cours = 0  # Chantiers dont date de fin n'est pas dans la période
-	
+	nb_chantiers_factures_periode = 0  # Chantiers dont statut est Completed
+	nb_chantiers_en_cours = 0  # Chantiers dont statut n'est pas Completed
+	nb_chantiers_receptionnes = 0  # Chantiers avec une réception
+
 	# Heures pour chantiers facturés pendant cette période
 	hours_factures_periode = 0  # Heures réalisées PENDANT la période
 	hours_factures_avant = 0  # Heures réalisées AVANT la période (période précédente)
 	total_hours_vendues = 0  # Heures vendues (prévues) pour ces chantiers
-	
+
 	# Heures pour chantiers en cours
 	hours_en_cours_periode = 0  # Heures réalisées sur chantiers pas encore facturés
 
@@ -129,14 +145,8 @@ def execute(filters: dict | None = None):
 		if filters.get('project_type') and p.project_type not in filters.get('project_type'):
 			continue
 
-		# Déterminer si le chantier est facturé PENDANT cette période
-		# (date de fin comprise entre start_date et end_date)
-		is_facture_periode = (
-			p.status == "Completed" 
-			and p.expected_end_date 
-			and p.expected_end_date >= frappe.utils.getdate(start_date)
-			and p.expected_end_date <= frappe.utils.getdate(end_date)
-		)
+		# Déterminer si le chantier est facturé (statut Completed)
+		is_facture = p.status == "Completed"
 
 		# Calcul des marges
 		theo_vente_tp, theo_cost_tp = get_theoretical(project_name, "Temps passé")
@@ -162,7 +172,7 @@ def execute(filters: dict | None = None):
 		hours_diff = hours_total_project - hours_expected
 		
 		# Accumulation selon le type de chantier
-		if is_facture_periode:
+		if is_facture:
 			nb_chantiers_factures_periode += 1
 			hours_factures_periode += hours_periode
 			hours_factures_avant += (hours_total_project - hours_periode)
@@ -178,12 +188,14 @@ def execute(filters: dict | None = None):
 		# Liens
 		reception_name = frappe.db.get_value('Work Completion Receipt', {'project': project_name}, ['name'])
 		reception_link = reception_name and f"<a href={frappe.utils.get_url_to_form('Work Completion Receipt', reception_name)}>📝</a>" or ""
+		if reception_name:
+			nb_chantiers_receptionnes += 1
 
 		incident_name = frappe.db.get_value('Quality Incident', {'project': project_name}, ['name'])
 		incident_link = incident_name and f"<a href={frappe.utils.get_url_to_form('Quality Incident', incident_name)}>⚠️</a>" or ""
 
-		# Date de fin
-		date = p.expected_end_date or ''
+		# Date de fin (affichée uniquement si le projet est facturé/Completed)
+		date = p.expected_end_date if p.status == "Completed" else ''
 
 		# Formatage couleurs (géré côté JS maintenant)
 		margin_diff_int = round(margin_diff)
@@ -213,23 +225,36 @@ def execute(filters: dict | None = None):
 			incident_link,
 		])
 
-	# Total heures chantiers sur la période
-	ch_hours = hours_factures_periode + hours_en_cours_periode
+	# Comptage des incidents qualité liés aux projets de la période
+	project_names = [t.get('project') for t in tss if t.get('project')]
+	nb_incidents_qualite = 0
+	if project_names:
+		nb_incidents_qualite = frappe.db.count('Quality Incident', filters={'project': ['in', project_names]})
 
-	# Calcul du pourcentage chantier après filtrage
-	total_hours = max(1, frais_generaux_hours + ch_hours)
-	pct_chantier = round(ch_hours / total_hours * 100)
+	# Génération du HTML pour les heures par activité (hors projet)
+	activity_items_html = ''.join([
+		f'<div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee;">'
+		f'<span style="font-size: 12px; color: #333;">{a.get("activity_type") or "Non défini"}</span>'
+		f'<span style="font-size: 12px; font-weight: bold; color: #1976d2;">{round(a.get("hours") or 0)} h</span>'
+		f'</div>'
+		for a in hours_by_activity
+	])
 
-	# Pourcentage heures = (heures chantiers + frais généraux) / heures vendues
-	total_heures_realisees = ch_hours + frais_generaux_hours
-	pct_heures = round(total_heures_realisees / max(1, total_hours_vendues) * 100) if total_hours_vendues else 0
-	pct_color = "#2e7d32" if pct_heures <= 100 else "#c62828"
+	# Couleur du pourcentage chantier (vert si >= 70%, orange sinon)
+	pct_color = "#2e7d32" if pct_chantier >= 70 else "#f57c00"
 
 	# Message en haut avec les statistiques
 	message = f"""
 	<div style="display: flex; gap: 20px; margin-bottom: 15px; flex-wrap: wrap;">
+		<!-- Bloc % Chantier -->
+		<div style="background: #f5f5f5; border-radius: 8px; padding: 15px; min-width: 120px; text-align: center;">
+			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">% Chantier</div>
+			<div style="font-size: 36px; font-weight: bold; color: {pct_color};">{pct_chantier}%</div>
+			<div style="font-size: 10px; color: #999;">{total_hours_on_project}h / {total_hours_all}h</div>
+		</div>
+
 		<!-- Bloc Chantiers -->
-		<div style="background: #f5f5f5; border-radius: 8px; padding: 15px; min-width: 200px;">
+		<div style="background: #f5f5f5; border-radius: 8px; padding: 15px; min-width: 250px;">
 			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">Chantiers période</div>
 			<div style="display: flex; gap: 20px;">
 				<div>
@@ -240,46 +265,27 @@ def execute(filters: dict | None = None):
 					<div style="font-size: 24px; font-weight: bold; color: #f57c00;">{nb_chantiers_en_cours}</div>
 					<div style="font-size: 11px; color: #666;">en cours</div>
 				</div>
-			</div>
-		</div>
-
-		<!-- Bloc Calcul Rentabilité -->
-		<div style="background: #f5f5f5; border-radius: 8px; padding: 15px; flex-grow: 1;">
-			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">Rentabilité période</div>
-			<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-				<div style="text-align: center; padding: 8px 12px; background: #e3f2fd; border-radius: 6px;">
-					<div style="font-size: 18px; font-weight: bold;">{ch_hours} h</div>
-					<div style="font-size: 10px; color: #666;">chantiers</div>
-				</div>
-				<span style="font-size: 20px; color: #666;">+</span>
-				<div style="text-align: center; padding: 8px 12px; background: #fff3e0; border-radius: 6px;">
-					<div style="font-size: 18px; font-weight: bold;">{frais_generaux_hours} h</div>
-					<div style="font-size: 10px; color: #666;">frais gén. <span style="color:#999">(VT {vt_hours} + At {at_hours})</span></div>
-				</div>
-				<span style="font-size: 20px; color: #666;">÷</span>
-				<div style="text-align: center; padding: 8px 12px; background: #e8f5e9; border-radius: 6px;">
-					<div style="font-size: 18px; font-weight: bold;">{total_hours_vendues} h</div>
-					<div style="font-size: 10px; color: #666;">facturées</div>
-				</div>
-				<span style="font-size: 20px; color: #666;">=</span>
-				<div style="text-align: center; padding: 10px 15px; background: {pct_color}; border-radius: 6px; color: white;">
-					<div style="font-size: 22px; font-weight: bold;">{pct_heures}%</div>
+				<div>
+					<div style="font-size: 24px; font-weight: bold; color: #1976d2;">{nb_chantiers_receptionnes}</div>
+					<div style="font-size: 11px; color: #666;">réceptionnés</div>
 				</div>
 			</div>
 		</div>
 
-		<!-- Bloc Report -->
+		<!-- Bloc Heures hors chantiers -->
 		<div style="background: #f5f5f5; border-radius: 8px; padding: 15px; min-width: 200px;">
-			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">Report</div>
-			<div style="display: flex; gap: 20px;">
-				<div>
-					<div style="font-size: 24px; font-weight: bold; color: #7b1fa2;">{hours_factures_avant} h</div>
-					<div style="font-size: 11px; color: #666;">période précéd.</div>
-				</div>
-				<div>
-					<div style="font-size: 24px; font-weight: bold; color: #1976d2;">{hours_en_cours_periode} h</div>
-					<div style="font-size: 11px; color: #666;">période suiv.</div>
-				</div>
+			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">Heures hors chantiers <span style="font-weight: bold;">({total_hours_no_project} h)</span></div>
+			<div style="max-height: 120px; overflow-y: auto;">
+				{activity_items_html if activity_items_html else '<div style="font-size: 12px; color: #999;">Aucune</div>'}
+			</div>
+		</div>
+
+		<!-- Bloc Incidents Qualité -->
+		<div style="background: #f5f5f5; border-radius: 8px; padding: 15px; min-width: 150px;">
+			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">Incidents qualité</div>
+			<div>
+				<div style="font-size: 24px; font-weight: bold; color: {'#c62828' if nb_incidents_qualite > 0 else '#2e7d32'};">{nb_incidents_qualite}</div>
+				<div style="font-size: 11px; color: #666;">sur les projets</div>
 			</div>
 		</div>
 	</div>
