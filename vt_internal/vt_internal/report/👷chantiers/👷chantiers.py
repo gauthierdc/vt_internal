@@ -231,6 +231,45 @@ def execute(filters: dict | None = None):
 	if project_names:
 		nb_incidents_qualite = frappe.db.count('Quality Incident', filters={'project': ['in', project_names]})
 
+	# Calcul du CA de la période
+	# Récupération des factures qui ne sont pas des acomptes, en docstatus=1,
+	# dont le projet a custom_estimated_labor_hours > 1
+	ca_periode_where = [
+		"si.docstatus = 1",
+		"si.is_return = 0",
+		"(si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)",
+		"p.custom_estimated_labor_hours > 1",
+		"p.name IS NOT NULL",
+		"si.posting_date BETWEEN %s AND %s"
+	]
+	ca_periode_params: list = [start_date, end_date]
+
+	# Filtre par société
+	if company_filter:
+		ca_periode_where.append("si.company = %s")
+		ca_periode_params.append(company_filter)
+
+	# Filtre par type de projet
+	if filters.get('project_type'):
+		project_types = filters.get('project_type')
+		if isinstance(project_types, list):
+			placeholders = ','.join(['%s'] * len(project_types))
+			ca_periode_where.append(f"p.project_type IN ({placeholders})")
+			ca_periode_params.extend(project_types)
+		else:
+			ca_periode_where.append("p.project_type = %s")
+			ca_periode_params.append(project_types)
+
+	ca_periode_sql = f"""
+		SELECT SUM(si.total) AS ca_total
+		FROM `tabSales Invoice` si
+		LEFT JOIN `tabProject` p ON p.name = si.project
+		WHERE {' AND '.join(ca_periode_where)}
+	"""
+
+	ca_periode_result = frappe.db.sql(ca_periode_sql, tuple(ca_periode_params), as_dict=True)
+	ca_periode_total = round(ca_periode_result[0].get('ca_total') or 0) if ca_periode_result else 0
+
 	# Génération du HTML pour les heures par activité (hors projet)
 	activity_items_html = ''.join([
 		f'<div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee;">'
@@ -243,9 +282,24 @@ def execute(filters: dict | None = None):
 	# Couleur du pourcentage chantier (vert si >= 70%, orange sinon)
 	pct_color = "#2e7d32" if pct_chantier >= 70 else "#f57c00"
 
+	# Format abrégé du CA (M pour millions, k pour milliers)
+	if ca_periode_total >= 1000000:
+		ca_display = f"{round(ca_periode_total / 1000000)}M"
+	elif ca_periode_total >= 1000:
+		ca_display = f"{round(ca_periode_total / 1000)}k"
+	else:
+		ca_display = str(ca_periode_total)
+
 	# Message en haut avec les statistiques
 	message = f"""
 	<div style="display: flex; gap: 20px; margin-bottom: 15px; flex-wrap: wrap;">
+		<!-- Bloc CA de la période -->
+		<div style="background: #f5f5f5; border-radius: 8px; padding: 15px; min-width: 150px; text-align: center;">
+			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">CA période</div>
+			<div style="font-size: 36px; font-weight: bold; color: #1976d2;">{ca_display} €</div>
+			<div style="font-size: 10px; color: #999;">Factures validées</div>
+		</div>
+
 		<!-- Bloc % Chantier -->
 		<div style="background: #f5f5f5; border-radius: 8px; padding: 15px; min-width: 120px; text-align: center;">
 			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">% Chantier</div>

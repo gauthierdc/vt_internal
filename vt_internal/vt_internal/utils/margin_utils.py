@@ -34,7 +34,7 @@ def get_theoretical(project, analysis_axis):
         WHERE so.project = %(project)s
         AND so.docstatus = 1
         AND so.custom_exclude_from_statistics != 1
-        AND soi.product_bundle_name IS NULL
+        AND COALESCE(soi.product_bundle_name, '') = ''
         {item_group_condition}
     """, params, as_dict=1)[0]
 
