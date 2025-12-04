@@ -104,6 +104,7 @@
 							fieldname: "country",
 							label: __("Pays"),
 							options: "Country",
+							only_select: 1,
 						},
 					];
 

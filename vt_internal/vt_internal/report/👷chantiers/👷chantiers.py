@@ -191,8 +191,8 @@ def execute(filters: dict | None = None):
 		if reception_name:
 			nb_chantiers_receptionnes += 1
 
-		incident_name = frappe.db.get_value('Quality Incident', {'project': project_name}, ['name'])
-		incident_link = incident_name and f"<a href={frappe.utils.get_url_to_form('Quality Incident', incident_name)}>⚠️</a>" or ""
+		incident_names = frappe.db.get_all('Quality Incident', filters={'project': project_name}, pluck='name')
+		incident_link = ' '.join([f"<a href={frappe.utils.get_url_to_form('Quality Incident', name)}>⚠️</a>" for name in incident_names]) if incident_names else ""
 
 		# Date de fin (affichée uniquement si le projet est facturé/Completed)
 		date = p.expected_end_date if p.status == "Completed" else ''
