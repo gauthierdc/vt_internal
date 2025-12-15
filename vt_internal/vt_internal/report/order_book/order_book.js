@@ -11,6 +11,12 @@ frappe.query_reports["Order book"] = {
             fieldtype: "Link",
             options: "Cost Center"
         },
+        {
+            fieldname: "custom_construction_manager",
+            label: __("Responsable de chantier"),
+            fieldtype: "Link",
+            options: "User"
+        },
         // Standard filters (status and per_billed handled server-side)
         ...frappe.get_meta("Sales Order").fields
             .filter(df => df.in_standard_filter && df.fieldname !== "status" && df.fieldname !== "transaction_date")

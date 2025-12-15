@@ -16,10 +16,12 @@ def execute(filters: dict | None = None):
 	"""
 	columns = get_columns()
 	data = get_data(filters)
-	# Compute remaining amount (HT) for report summary
-	remaining_ht = sum(row[10] for row in data)
+	# Compute remaining amount (HT) and total hours for report summary
+	remaining_ht = sum(row[11] for row in data)
+	total_hours = sum((row[8] or 0) for row in data)
 	report_summary = [
 		{ "value": len(data), "label": _("Nombre de commande"), "datatype": "Int" },
+		{ "value": total_hours, "label": _("Heures"), "datatype": "Float" },
 		{ "value": remaining_ht, "label": _("Reste à facturer (HT)"), "datatype": "Currency" }
 	]
 	return columns, data, None, None, report_summary
@@ -36,6 +38,7 @@ def get_columns() -> list[dict]:
 		{"label": _("Date de livraison"),      "fieldname": "delivery_date",      "fieldtype": "Date",     "width": 100},
 		{"label": _("Référence pièce"),        "fieldname": "reference_piece",              "fieldtype": "Data",     "width": 120},
 		{"label": _("Responsable du devis"),   "fieldname": "custom_responsable_du_devis", "fieldtype": "Link", "options": "User", "width": 150},
+		{"label": _("Nombre d'heures"),        "fieldname": "custom_labour_hours", "fieldtype": "Float", "width": 120},
 		{"label": _("Total (HT)"),             "fieldname": "total",              "fieldtype": "Currency", "options": "currency", "width": 120},
 		{"label": _("Pourcentage facturé"),    "fieldname": "per_billed",         "fieldtype": "Percent",  "width": 100},
 		{"label": _("Reste à facturer (HT)"),  "fieldname": "remaining_amount",   "fieldtype": "Currency", "options": "currency", "width": 150},
@@ -60,7 +63,7 @@ def get_data(filters: dict | None = None) -> list[list]:
 	orders = frappe.get_list(
 		"Sales Order",
 		fields=["name", "customer", "status", "transaction_date", "delivery_date",
-				"reference_piece", "custom_responsable_du_devis", "total", "per_billed"],
+				"reference_piece", "custom_responsable_du_devis", "custom_labour_hours", "total", "per_billed"],
 		filters=query_filters,
 		order_by="transaction_date desc"
 	)
@@ -81,6 +84,7 @@ def get_data(filters: dict | None = None) -> list[list]:
 			order.get("delivery_date"),
 			order.get("reference_piece"),
 			order.get("custom_responsable_du_devis"),
+			order.get("custom_labour_hours"),
 			total,
 			per_billed,
 			remaining

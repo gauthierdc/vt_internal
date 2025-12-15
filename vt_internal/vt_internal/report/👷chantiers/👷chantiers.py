@@ -31,7 +31,7 @@ def execute(filters: dict | None = None):
 		company_filter = None
 
 	# aggregate timesheets by project using SQL to avoid restricted subqueries
-	where = ["t.docstatus != 2", "d.project IS NOT NULL"]
+	where = ["t.docstatus = 1", "d.project IS NOT NULL"]
 	params: list = []
 	if company_filter:
 		where.append("t.company = %s")
@@ -52,8 +52,8 @@ def execute(filters: dict | None = None):
 
 	tss = frappe.db.sql(sql, tuple(params), as_dict=True)
 
-	# Heures sans projet, groupées par type d'activité (excluant Fabrication)
-	where_no_project = ["t.docstatus != 2", "(d.project IS NULL OR d.project = '')", "COALESCE(d.activity_type, '') != 'Fabrication'"]
+	# Heures sans projet, groupées par type d'activité (excluant Fabrication et Livraison)
+	where_no_project = ["t.docstatus = 1", "(d.project IS NULL OR d.project = '')", "COALESCE(d.activity_type, '') NOT IN ('Fabrication', 'Livraison')"]
 	params_no_project: list = []
 	if company_filter:
 		where_no_project.append("t.company = %s")
@@ -74,8 +74,8 @@ def execute(filters: dict | None = None):
 	hours_by_activity = frappe.db.sql(sql_no_project, tuple(params_no_project), as_dict=True)
 	total_hours_no_project = round(sum([(r.get('hours') or 0) for r in hours_by_activity]))
 
-	# Total heures sur chantiers (excluant Fabrication) pour calcul du pourcentage
-	where_on_project = ["t.docstatus != 2", "d.project IS NOT NULL", "d.project != ''", "COALESCE(d.activity_type, '') != 'Fabrication'"]
+	# Total heures sur chantiers (excluant Fabrication et Livraison) pour calcul du pourcentage
+	where_on_project = ["t.docstatus = 1", "d.project IS NOT NULL", "d.project != ''", "COALESCE(d.activity_type, '') NOT IN ('Fabrication', 'Livraison')"]
 	params_on_project: list = []
 	if company_filter:
 		where_on_project.append("t.company = %s")
@@ -116,6 +116,7 @@ def execute(filters: dict | None = None):
 	nb_chantiers_factures_periode = 0  # Chantiers dont statut est Completed
 	nb_chantiers_en_cours = 0  # Chantiers dont statut n'est pas Completed
 	nb_chantiers_receptionnes = 0  # Chantiers avec une réception
+	nb_incidents_qualite = 0  # Total des incidents qualité sur les projets affichés
 
 	# Heures pour chantiers facturés pendant cette période
 	hours_factures_periode = 0  # Heures réalisées PENDANT la période
@@ -193,6 +194,7 @@ def execute(filters: dict | None = None):
 
 		incident_names = frappe.db.get_all('Quality Incident', filters={'project': project_name}, pluck='name')
 		incident_link = ' '.join([f"<a href={frappe.utils.get_url_to_form('Quality Incident', name)}>⚠️</a>" for name in incident_names]) if incident_names else ""
+		nb_incidents_qualite += len(incident_names)
 
 		# Date de fin (affichée uniquement si le projet est facturé/Completed)
 		date = p.expected_end_date if p.status == "Completed" else ''
@@ -225,11 +227,6 @@ def execute(filters: dict | None = None):
 			incident_link,
 		])
 
-	# Comptage des incidents qualité liés aux projets de la période
-	project_names = [t.get('project') for t in tss if t.get('project')]
-	nb_incidents_qualite = 0
-	if project_names:
-		nb_incidents_qualite = frappe.db.count('Quality Incident', filters={'project': ['in', project_names]})
 
 	# Calcul du CA de la période
 	# Récupération des factures qui ne sont pas des acomptes, en docstatus=1,
@@ -270,6 +267,41 @@ def execute(filters: dict | None = None):
 	ca_periode_result = frappe.db.sql(ca_periode_sql, tuple(ca_periode_params), as_dict=True)
 	ca_periode_total = round(ca_periode_result[0].get('ca_total') or 0) if ca_periode_result else 0
 
+	# Heures facturées (somme de custom_labour_hours des factures avec les mêmes filtres)
+	heures_facturees_sql = f"""
+		SELECT SUM(si.custom_labour_hours) AS heures_total
+		FROM `tabSales Invoice` si
+		LEFT JOIN `tabProject` p ON p.name = si.project
+		WHERE {' AND '.join(ca_periode_where)}
+	"""
+	heures_facturees_result = frappe.db.sql(heures_facturees_sql, tuple(ca_periode_params), as_dict=True)
+	heures_facturees = round(heures_facturees_result[0].get('heures_total') or 0) if heures_facturees_result else 0
+
+	# Heures réalisées (toutes les timesheets validées, hors Fabrication et Livraison)
+	where_heures_realisees = [
+		"t.docstatus = 1",
+		"COALESCE(d.activity_type, '') NOT IN ('Fabrication', 'Livraison')"
+	]
+	params_heures_realisees: list = []
+	if company_filter:
+		where_heures_realisees.append("t.company = %s")
+		params_heures_realisees.append(company_filter)
+	where_heures_realisees.append("t.end_date BETWEEN %s AND %s")
+	params_heures_realisees.extend([start_date, end_date])
+
+	sql_heures_realisees = f"""
+		SELECT SUM(d.hours) AS hours
+		FROM `tabTimesheet` t
+		JOIN `tabTimesheet Detail` d ON d.parent = t.name
+		WHERE {' AND '.join(where_heures_realisees)}
+	"""
+	heures_realisees_result = frappe.db.sql(sql_heures_realisees, tuple(params_heures_realisees), as_dict=True)
+	heures_realisees = round(heures_realisees_result[0].get('hours') or 0) if heures_realisees_result else 0
+
+	# Calcul du pourcentage heures réalisées / facturées
+	pct_heures = round(heures_realisees / heures_facturees * 100) if heures_facturees > 0 else 0
+	pct_heures_color = "#c62828" if pct_heures > 100 else "#2e7d32"
+
 	# Génération du HTML pour les heures par activité (hors projet)
 	activity_items_html = ''.join([
 		f'<div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee;">'
@@ -298,6 +330,13 @@ def execute(filters: dict | None = None):
 			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">CA période</div>
 			<div style="font-size: 36px; font-weight: bold; color: #1976d2;">{ca_display} €</div>
 			<div style="font-size: 10px; color: #999;">Factures validées</div>
+		</div>
+
+		<!-- Bloc Heures réalisées / facturées -->
+		<div style="background: #f5f5f5; border-radius: 8px; padding: 15px; min-width: 150px; text-align: center;">
+			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">Heures réalisées / facturées</div>
+			<div style="font-size: 36px; font-weight: bold; color: {pct_heures_color};">{pct_heures}%</div>
+			<div style="font-size: 10px; color: #999;">{heures_realisees}h / {heures_facturees}h</div>
 		</div>
 
 		<!-- Bloc % Chantier -->
