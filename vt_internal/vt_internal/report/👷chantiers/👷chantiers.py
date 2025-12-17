@@ -106,7 +106,7 @@ def execute(filters: dict | None = None):
 		"Type de projet::120",
 		"Date de fin:Date:100",
 		"Réception::50",
-		"Incident::50",
+		"Incident::100",
 	]
 
 	mydata = []

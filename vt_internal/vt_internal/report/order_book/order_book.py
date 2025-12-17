@@ -32,7 +32,7 @@ def get_columns() -> list[dict]:
 	return [
 		{"label": _("Désignation"),            "fieldname": "name",               "fieldtype": "Link",     "options": "Sales Order", "width": 150},
 		{"label": _("Client"),                 "fieldname": "customer_name",      "fieldtype": "Data",     "width": 180},
-		{"label": _("Statut"),                 "fieldname": "status",             "fieldtype": "Data",     "width": 120},
+		{"label": _("Statut"),                 "fieldname": "status",             "fieldtype": "Data",     "width": 150},
 		{"label": _("Date"),                   "fieldname": "transaction_date",   "fieldtype": "Date",     "width": 100},
 		{"label": _("Age (J)"),                    "fieldname": "age",                "fieldtype": "Int",      "width": 80},
 		{"label": _("Date de livraison"),      "fieldname": "delivery_date",      "fieldtype": "Date",     "width": 100},
@@ -42,6 +42,13 @@ def get_columns() -> list[dict]:
 		{"label": _("Total (HT)"),             "fieldname": "total",              "fieldtype": "Currency", "options": "currency", "width": 120},
 		{"label": _("Pourcentage facturé"),    "fieldname": "per_billed",         "fieldtype": "Percent",  "width": 100},
 		{"label": _("Reste à facturer (HT)"),  "fieldname": "remaining_amount",   "fieldtype": "Currency", "options": "currency", "width": 150},
+		# Hidden columns for get_indicator
+		{"fieldname": "per_delivered",                  "fieldtype": "Percent", "hidden": 1},
+		{"fieldname": "skip_delivery_note",             "fieldtype": "Check",   "hidden": 1},
+		{"fieldname": "grand_total",                    "fieldtype": "Currency","hidden": 1},
+		{"fieldname": "custom_statut_fiche_de_travail", "fieldtype": "Data",    "hidden": 1},
+		{"fieldname": "custom_per_received",            "fieldtype": "Percent", "hidden": 1},
+		{"fieldname": "custom_payment_request_status",  "fieldtype": "Data",    "hidden": 1},
 	]
 
 
@@ -63,7 +70,9 @@ def get_data(filters: dict | None = None) -> list[list]:
 	orders = frappe.get_list(
 		"Sales Order",
 		fields=["name", "customer", "status", "transaction_date", "delivery_date",
-				"reference_piece", "custom_responsable_du_devis", "custom_labour_hours", "total", "per_billed"],
+				"reference_piece", "custom_responsable_du_devis", "custom_labour_hours", "total", "per_billed",
+				"per_delivered", "skip_delivery_note", "grand_total",
+				"custom_statut_fiche_de_travail", "custom_per_received", "custom_payment_request_status"],
 		filters=query_filters,
 		order_by="transaction_date desc"
 	)
@@ -78,7 +87,7 @@ def get_data(filters: dict | None = None) -> list[list]:
 		data.append([
 			order.get("name"),
 			order.get("customer"),
-			_(order.get("status")),
+			order.get("status"),
 			txn_date,
 			age,
 			order.get("delivery_date"),
@@ -87,6 +96,13 @@ def get_data(filters: dict | None = None) -> list[list]:
 			order.get("custom_labour_hours"),
 			total,
 			per_billed,
-			remaining
+			remaining,
+			# Hidden fields for get_indicator
+			order.get("per_delivered"),
+			order.get("skip_delivery_note"),
+			order.get("grand_total"),
+			order.get("custom_statut_fiche_de_travail"),
+			order.get("custom_per_received"),
+			order.get("custom_payment_request_status"),
 		])
 	return data

@@ -29,11 +29,22 @@ frappe.query_reports["Order book"] = {
             })),
     ],
     // Color the Age column: <30 green, <100 orange, else red
+    // Color the Status column using Sales Order listview indicator
     formatter: function(value, row, column, data, default_formatter) {
         let html = default_formatter(value, row, column, data);
         if (column.fieldname === "age" && value != null) {
             let color = value < 30 ? "green" : value < 100 ? "orange" : "red";
             html = `<span style="color:${color}">${value}</span>`;
+        }
+        if (column.fieldname === "status" && data) {
+            const get_indicator = frappe.listview_settings['Sales Order']?.get_indicator;
+            if (get_indicator) {
+                const indicator = get_indicator(data);
+                if (indicator) {
+                    const [label, color] = indicator;
+                    html = `<span class="indicator-pill ${color}">${label}</span>`;
+                }
+            }
         }
         return html;
     }
