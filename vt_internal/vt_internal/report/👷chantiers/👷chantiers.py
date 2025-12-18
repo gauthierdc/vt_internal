@@ -17,6 +17,9 @@ def execute(filters: dict | None = None):
 
 	Filters expected: {"start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "company": "Company name"}
 	"""
+	# Forcer prepared_report = 0
+	frappe.db.set_value('Report', '👷Chantiers', 'prepared_report', 0, update_modified=False)
+
 	filters = filters or {}
 
 	end_date = filters.get('end_date') or frappe.utils.nowdate()
@@ -38,6 +41,9 @@ def execute(filters: dict | None = None):
 		params.append(company_filter)
 	where.append("t.end_date BETWEEN %s AND %s")
 	params.extend([start_date, end_date])
+	if filters.get('construction_manager'):
+		where.append("p.custom_construction_manager = %s")
+		params.append(filters.get('construction_manager'))
 
 	sql = f"""
 		SELECT
@@ -46,6 +52,7 @@ def execute(filters: dict | None = None):
 			SUM(d.hours) AS hours
 		FROM `tabTimesheet` t
 		JOIN `tabTimesheet Detail` d ON d.parent = t.name
+		JOIN `tabProject` p ON p.name = d.project
 		WHERE {' AND '.join(where)}
 		GROUP BY d.project
 	"""
@@ -82,11 +89,15 @@ def execute(filters: dict | None = None):
 		params_on_project.append(company_filter)
 	where_on_project.append("t.end_date BETWEEN %s AND %s")
 	params_on_project.extend([start_date, end_date])
+	if filters.get('construction_manager'):
+		where_on_project.append("p.custom_construction_manager = %s")
+		params_on_project.append(filters.get('construction_manager'))
 
 	sql_on_project = f"""
 		SELECT SUM(d.hours) AS hours
 		FROM `tabTimesheet` t
 		JOIN `tabTimesheet Detail` d ON d.parent = t.name
+		JOIN `tabProject` p ON p.name = d.project
 		WHERE {' AND '.join(where_on_project)}
 	"""
 	hours_on_project_result = frappe.db.sql(sql_on_project, tuple(params_on_project), as_dict=True)
@@ -279,6 +290,11 @@ def execute(filters: dict | None = None):
 			ca_periode_where.append("p.project_type = %s")
 			ca_periode_params.append(project_types)
 
+	# Filtre par conducteur de travaux
+	if filters.get('construction_manager'):
+		ca_periode_where.append("p.custom_construction_manager = %s")
+		ca_periode_params.append(filters.get('construction_manager'))
+
 	ca_periode_sql = f"""
 		SELECT SUM(si.total) AS ca_total
 		FROM `tabSales Invoice` si
@@ -311,10 +327,18 @@ def execute(filters: dict | None = None):
 	where_heures_realisees.append("t.end_date BETWEEN %s AND %s")
 	params_heures_realisees.extend([start_date, end_date])
 
+	# Jointure et filtre par conducteur de travaux
+	join_project_heures = ""
+	if filters.get('construction_manager'):
+		join_project_heures = "LEFT JOIN `tabProject` p ON p.name = d.project"
+		where_heures_realisees.append("p.custom_construction_manager = %s")
+		params_heures_realisees.append(filters.get('construction_manager'))
+
 	sql_heures_realisees = f"""
 		SELECT SUM(d.hours) AS hours
 		FROM `tabTimesheet` t
 		JOIN `tabTimesheet Detail` d ON d.parent = t.name
+		{join_project_heures}
 		WHERE {' AND '.join(where_heures_realisees)}
 	"""
 	heures_realisees_result = frappe.db.sql(sql_heures_realisees, tuple(params_heures_realisees), as_dict=True)
