@@ -185,10 +185,13 @@ scheduler_events = {
 
 # Overriding Methods
 # ------------------------------
-#
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "vt_internal.event.get_events"
-# }
+
+# WORKAROUND TEMPORAIRE - À SUPPRIMER quand corrigé upstream
+# Issue: https://github.com/frappe/erpnext/issues/49677
+# Problème: Les User Permissions ne sont pas appliquées en mode calendrier
+override_whitelisted_methods = {
+	"frappe.desk.doctype.event.event.get_events": "vt_internal.vt_internal.overrides.event.get_events"
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,

@@ -224,7 +224,9 @@ class Analytics(object):
         if self.filters.get("secteur"):
             filters["secteur_vt"] = self.filters.secteur
         if self.filters.get("cost_center"):
-            filters["cost_center"] = self.filters.cost_center
+            cc = self.filters.cost_center
+            descendants = frappe.db.get_descendants("Cost Center", cc)
+            filters["cost_center"] = ["in", [cc] + descendants]
         if self.filters.get("insurance"):
             filters["custom_insurance_client"] = self.filters.insurance
         if self.filters.get("custom_responsable_du_devis"):
@@ -243,8 +245,12 @@ class Analytics(object):
             secteur_filter = f" and {alias}.secteur_vt = %s"
             params.append(self.filters.secteur)
         if self.filters.get("cost_center"):
-            cost_center_filter = f" and {alias}.cost_center = %s"
-            params.append(self.filters.cost_center)
+            cc = self.filters.cost_center
+            descendants = frappe.db.get_descendants("Cost Center", cc)
+            cost_centers = [cc] + descendants
+            placeholders = ", ".join(["%s"] * len(cost_centers))
+            cost_center_filter = f" and {alias}.cost_center IN ({placeholders})"
+            params.extend(cost_centers)
         if self.filters.get("insurance"):
             insurance_filter = f" and {alias}.custom_insurance_client = %s"
             params.append(self.filters.insurance)
@@ -738,7 +744,11 @@ class Analytics(object):
         if self.filters.get("secteur"):
             filters.append("so.secteur_vt = '{}'".format(self.filters.secteur))
         if self.filters.get("cost_center"):
-            filters.append("so.cost_center = '{}'".format(self.filters.cost_center))
+            cc = self.filters.cost_center
+            descendants = frappe.db.get_descendants("Cost Center", cc)
+            cost_centers = [cc] + descendants
+            quoted = ", ".join([f"'{c}'" for c in cost_centers])
+            filters.append(f"so.cost_center IN ({quoted})")
         if self.filters.get("custom_responsable_du_devis"):
             filters.append("so.custom_responsable_du_devis = '{}'".format(self.filters.custom_responsable_du_devis))
         if self.filters.get("insurance"):
