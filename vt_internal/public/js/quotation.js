@@ -212,8 +212,11 @@ frappe.ui.form.on('Quotation', {
 
     cost_center(frm) {
         if (!frm.doc.cost_center) return;
-        frappe.db.get_value('Cost Center', frm.doc.cost_center, ['custom_type_de_projet']).then(r => {
+        frappe.db.get_value('Cost Center', frm.doc.cost_center, ['custom_type_de_projet', 'cost_center_name']).then(r => {
             frm.set_value({ custom_type_de_projet: r.message.custom_type_de_projet });
+            if (r.message.cost_center_name && r.message.cost_center_name.includes('Assurance')) {
+                frm.set_value('custom_insurance', 1);
+            }
         });
     }
 });

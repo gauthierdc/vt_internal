@@ -64,6 +64,9 @@ frappe.ui.form.on('Visite Technique', {
             
         })
         if(frm.doc.projet) {
+            frm.add_custom_button(__('Événement'), function(){
+                frappe.new_doc("Event", { project: frm.doc.projet, custom_visite_technique: frm.doc.name });
+            }, __("Create"));
             frm.add_custom_button(__('📁'), function(){
                 const dialog = new frappe.ui.Dialog({
                     size: "extra-large",

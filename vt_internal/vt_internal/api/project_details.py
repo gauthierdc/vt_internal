@@ -213,6 +213,14 @@ def project_details():
         )
         return si
 
+    def get_events(project_id):
+        events = frappe.db.get_list('Event',
+            filters={'project': project_id},
+            fields=["name", "subject", "starts_on", "color"],
+            order_by="starts_on asc"
+        )
+        return events
+
     project_id = frappe.form_dict.get("project")
     project = frappe.get_doc("Project", project_id)
     theo_vente_global, theo_cost_global = get_theoretical(project_id, "global")
@@ -322,6 +330,23 @@ def project_details():
             <p style="color: red; font-size: 24px; margin: 5px 0;">{frappe.utils.fmt_money(total_purchases, currency='EUR')}</p>
           </div>"""
     temps_du_projet = frappe.utils.date_diff(items[-1]["date"], items[0]["date"]) if items else 0
+
+    # Section Événements
+    events = get_events(project_id)
+    events_tags = ""
+    for e in events:
+        color = e.color or "#6c757d"
+        date_str = frappe.utils.format_date(e.starts_on, "dd/MM/yyyy") if e.starts_on else ""
+        events_tags += f'''<a href="#" onclick="frappe.set_route('Form', 'Event', '{e.name}')" title="{e.subject or ''}"><span class="badge" style="background-color: {color}; cursor: pointer;">{date_str}</span></a>'''
+    events_html = f"""
+        <div style="margin-top: 20px;">
+            <h4>Événements</h4>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                {events_tags}
+            </div>
+        </div>
+    """ if events else ""
+
     content_rows = [
         f"""<tr>
                 <td>{i["doctype"]}</td>
@@ -381,5 +406,6 @@ def project_details():
             </tbody>
         </table>
         <p style="color: black; font-size: 16px; font-weight: bolder;">Durée totale du projet: {temps_du_projet} jours</p>
+{events_html}
         </div>"""
     frappe.response['message'] = {"html": html}
