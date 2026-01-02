@@ -17,8 +17,201 @@ const timer_api = (args, message) => {
     })
 }
 
+// === PHOTO GALLERY FUNCTIONS ===
+
+function is_image(url) {
+    if (!url) return false;
+    return /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$/i.test(url);
+}
+
+function render_photos_section(frm) {
+    if (!frm.fields_dict.photos_section) return;
+
+    if (!frm.doc.name || frm.is_new()) {
+        frm.fields_dict.photos_section.$wrapper.html(`
+            <div style="padding: 20px; text-align: center; background: #f5f5f5; border-radius: 8px; margin: 10px 0;">
+                <p class="text-muted" style="margin: 0;">Enregistrez le document pour ajouter des photos</p>
+            </div>
+        `);
+        return;
+    }
+
+    // Charger les fichiers attachés
+    frappe.call({
+        method: 'frappe.client.get_list',
+        args: {
+            doctype: 'File',
+            filters: {
+                attached_to_doctype: 'Visite Technique',
+                attached_to_name: frm.doc.name,
+                is_folder: 0
+            },
+            fields: ['name', 'file_url', 'file_name'],
+            order_by: 'creation desc',
+            limit_page_length: 0
+        },
+        callback: function(r) {
+            const files = (r.message || []).filter(f => is_image(f.file_url));
+
+            let html = `
+                <div style="margin: 10px 0; display: flex; gap: 10px;">
+                    <button class="btn btn-primary btn-lg photos-camera-btn" style="flex:1; font-size:16px; padding:15px; border-radius:8px;">
+                        <i class="fa fa-camera" style="margin-right: 8px;"></i> Prendre une photo
+                    </button>
+                    <button class="btn btn-default btn-lg photos-gallery-btn" style="flex:1; font-size:16px; padding:15px; border-radius:8px; border: 2px solid #ddd;">
+                        <i class="fa fa-image" style="margin-right: 8px;"></i> Galerie
+                    </button>
+                </div>
+            `;
+
+            if (files.length > 0) {
+                html += `
+                    <div class="photos-gallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 15px;">
+                `;
+
+                files.forEach(file => {
+                    html += `
+                        <div class="photo-item" style="position: relative; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <a href="${file.file_url}" target="_blank" style="display: block;">
+                                <img src="${file.file_url}" alt="${file.file_name}"
+                                    style="width:100%; height:150px; object-fit:cover; cursor:pointer; transition: transform 0.2s;"
+                                    onmouseover="this.style.transform='scale(1.05)'"
+                                    onmouseout="this.style.transform='scale(1)'">
+                            </a>
+                            <button class="btn btn-danger btn-xs delete-photo-btn" data-file="${file.name}"
+                                style="position:absolute; top:5px; right:5px; border-radius:50%; width:28px; height:28px; padding:0; display:flex; align-items:center; justify-content:center; opacity:0.9;">
+                                <i class="fa fa-times"></i>
+                            </button>
+                        </div>
+                    `;
+                });
+
+                html += '</div>';
+            } else {
+                html += `
+                    <div style="padding: 30px; text-align: center; background: #fafafa; border-radius: 8px; margin-top: 15px; border: 2px dashed #ddd;">
+                        <i class="fa fa-image" style="font-size: 48px; color: #ccc; margin-bottom: 10px;"></i>
+                        <p class="text-muted" style="margin: 0;">Aucune photo pour le moment</p>
+                    </div>
+                `;
+            }
+
+            frm.fields_dict.photos_section.$wrapper.html(html);
+
+            // Bind events
+            frm.fields_dict.photos_section.$wrapper.find('.photos-camera-btn').click(() => open_photo_dialog(frm, true));
+            frm.fields_dict.photos_section.$wrapper.find('.photos-gallery-btn').click(() => open_photo_dialog(frm, false));
+            frm.fields_dict.photos_section.$wrapper.find('.delete-photo-btn').click(function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                delete_photo(frm, $(this).data('file'));
+            });
+        }
+    });
+}
+
+function open_photo_dialog(frm, useCamera = false) {
+    // Créer input file caché
+    // useCamera=true : ouvre la caméra directement (capture="environment")
+    // useCamera=false : ouvre le sélecteur de fichiers/galerie (multiple)
+    let $input;
+    if (useCamera) {
+        $input = $('<input type="file" accept="image/*" capture="environment" style="display:none;">');
+    } else {
+        $input = $('<input type="file" multiple accept="image/*" style="display:none;">');
+    }
+    $('body').append($input);
+
+    $input.on('change', function() {
+        let files = this.files;
+        if (files.length > 0) {
+            upload_photos(frm, files);
+        }
+        $input.remove();
+    });
+
+    $input.click();
+}
+
+function upload_photos(frm, files) {
+    const total = files.length;
+    let uploaded = 0;
+    let errors = 0;
+
+    frappe.show_progress('Upload', 0, total, 'Upload en cours...');
+
+    const uploadNext = (index) => {
+        if (index >= total) {
+            frappe.hide_progress();
+            if (errors > 0) {
+                frappe.msgprint(__(`${uploaded} photo(s) uploadée(s), ${errors} erreur(s)`));
+            } else {
+                frappe.show_alert({message: __(`${uploaded} photo(s) ajoutée(s)`), indicator: 'green'});
+            }
+            render_photos_section(frm);
+            return;
+        }
+
+        const file = files[index];
+        const formData = new FormData();
+        formData.append('file', file, file.name);
+        formData.append('doctype', frm.doctype);
+        formData.append('docname', frm.doc.name);
+        formData.append('is_private', 0);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/method/upload_file', true);
+        xhr.setRequestHeader('X-Frappe-CSRF-Token', frappe.csrf_token);
+
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                uploaded++;
+                frappe.show_progress('Upload', uploaded, total, `${uploaded}/${total} photos...`);
+            } else {
+                console.error('Upload error:', xhr.responseText);
+                errors++;
+            }
+            uploadNext(index + 1);
+        };
+
+        xhr.onerror = function() {
+            console.error('Upload error');
+            errors++;
+            uploadNext(index + 1);
+        };
+
+        xhr.send(formData);
+    };
+
+    uploadNext(0);
+}
+
+function delete_photo(frm, file_name) {
+    frappe.confirm(
+        __('Supprimer cette photo ?'),
+        () => {
+            frappe.call({
+                method: 'frappe.client.delete',
+                args: { doctype: 'File', name: file_name },
+                callback: () => {
+                    frappe.show_alert({message: __('Photo supprimée'), indicator: 'green'});
+                    render_photos_section(frm);
+                },
+                error: () => {
+                    frappe.msgprint(__('Erreur lors de la suppression'));
+                }
+            });
+        }
+    );
+}
+
+// === END PHOTO GALLERY FUNCTIONS ===
+
 frappe.ui.form.on('Visite Technique', {
     refresh: function(frm) {
+        // Rendre la galerie photos
+        render_photos_section(frm);
+
         if(frm.doc.quotation) {
             frappe.db.get_value('Quotation', frm.doc.quotation, 'custom_quotation_approval_link').then(r => {
                 frm.add_web_link(r.message.custom_quotation_approval_link, 'Voir le lien du BPA')
