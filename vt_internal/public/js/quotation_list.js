@@ -2,7 +2,7 @@ const original_indicator = frappe.listview_settings['Quotation'].get_indicator
 const original_onload = frappe.listview_settings['Quotation'].onload
 
 Object.assign(frappe.listview_settings['Quotation'], {
-    add_fields: ["custom_visite_technique_status", "custom_signature", "custom_dernier_statut_de_suivi", "status"],
+    add_fields: ["custom_visite_technique_status", "custom_signature", "custom_dernier_statut_de_suivi", "custom_variant_number", "status"],
     has_indicator_for_draft: true,
     get_indicator(doc) {
         const oi = original_indicator(doc)
@@ -14,7 +14,8 @@ Object.assign(frappe.listview_settings['Quotation'], {
             return [__("Curieux"), "darkgrey", "custom_dernier_statut_de_suivi,=,Curieux (ne pas relancer)|status,not in,Ordered,Lost,Partially Ordered,Cancelled"];
         }
         if(doc.custom_dernier_statut_de_suivi === "Variante") {
-            return [__("Variant"), "yellow", "custom_dernier_statut_de_suivi,=,Variante"];
+            const varNum = doc.custom_variant_number || 1;
+            return [__("Var.") + " " + varNum, "yellow", "custom_dernier_statut_de_suivi,=,Variante"];
         }
         if(doc.custom_visite_technique_status === "À faire") {
             return [__("VT à faire"), "blue", "custom_visite_technique_status,=,À faire|status,not in,Ordered,Lost,Partially Ordered,Cancelled|docstatus,!=,2"];

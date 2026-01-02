@@ -157,6 +157,7 @@ function addStatusDialogButton(frm) {
             title: 'Mettre à jour le statut de suivi',
             fields: [
                 { label: 'Nouveau statut', fieldname: 'status', fieldtype: 'Select', options: options_statut },
+                { label: 'Numéro de variante', fieldname: 'variant_number', fieldtype: 'Int', default: 1, hidden: 1 },
                 { label: 'Description', fieldname: 'description', fieldtype: 'Small Text' },
                 { label: 'Probabilité de conversion', fieldname: 'prob', fieldtype: 'Percent' },
                 { label: 'Date de la prochaine relance manuelle', fieldname: 'followup_date', fieldtype: 'Date' }
@@ -169,6 +170,9 @@ function addStatusDialogButton(frm) {
                     frm.add_child('custom_status_internes', { statut: values.status, description: values.description });
                 }
                 frm.set_value('custom_date_de_relance', values.followup_date);
+                if (values.status === 'Variante') {
+                    frm.set_value('custom_variant_number', values.variant_number || 1);
+                }
 
                 if (frm.doc.docstatus === 1) frm.save('Update'); else frm.save();
                 d.hide();
@@ -178,7 +182,9 @@ function addStatusDialogButton(frm) {
         let today = frappe.datetime.get_today();
         let next_week = frappe.datetime.add_days(today, 7);
         d.fields_dict.status.df.onchange = function() {
-            if (d.get_value('status') === 'Relance manuelle') d.set_value('followup_date', next_week);
+            let status = d.get_value('status');
+            if (status === 'Relance manuelle') d.set_value('followup_date', next_week);
+            d.set_df_property('variant_number', 'hidden', status !== 'Variante');
         };
         d.show();
     });
