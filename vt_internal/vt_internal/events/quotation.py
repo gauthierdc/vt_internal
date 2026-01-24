@@ -17,7 +17,13 @@ def before_validate(doc, method=None):
 
 def validate(doc, method=None):
     """Validations fonctionnelles avant sauvegarde."""
-    pass
+    if not doc.custom_insurance:
+        doc.custom_insurance_client = None
+        doc.custom_claim_number = None
+        doc.custom_insurance_contract_number = None
+        doc.custom_expert_name = None
+        doc.custom_expert_tel = None
+        doc.custom_expert_email = None
 
 def before_insert(doc, method=None):
     """Avant l'insertion en base : concatène les termes du devis."""

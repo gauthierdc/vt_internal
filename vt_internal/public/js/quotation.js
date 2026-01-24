@@ -144,7 +144,20 @@ function addProjectQuotationsButton(frm) {
     });
 }
 
+function addReopenButton(frm) {
+    if (frm.doc.status !== 'Lost') return;
+
+    frm.add_custom_button(__('Réouvrir le devis'), function() {
+        frm.clear_table('custom_status_internes');
+        frm.set_value('status', 'Open');
+        frm.set_value('custom_probabilite_de_conversion', null);
+        if (frm.doc.docstatus === 1) frm.save('Update'); else frm.save();
+    });
+}
+
 function addStatusDialogButton(frm) {
+    if (frm.doc.status === 'Lost') return;
+
     frm.add_custom_button('Statut de suivi', () => {
         let options_statut;
         if (!frm.doc.custom_dernier_statut_de_suivi) {
@@ -190,9 +203,14 @@ function addStatusDialogButton(frm) {
     });
 }
 
+function removeSetAsLostButton(frm) {
+    frm.remove_custom_button(__('Set as Lost'));
+    frm.remove_custom_button(__('Considérer comme perdu'));
+}
+
 // Main form handlers - keep concise and call helpers
 frappe.ui.form.on('Quotation', {
-    onload_post_render: (frm) => frm.remove_custom_button(__('Set as Lost')),
+    onload_post_render: (frm) => removeSetAsLostButton(frm),
 
     refresh: function(frm) {
         addWebLinks(frm);
@@ -203,9 +221,9 @@ frappe.ui.form.on('Quotation', {
         addVisiteTechniqueButton(frm);
         addProjectQuotationsButton(frm);
         addStatusDialogButton(frm);
-
-        // remove default button
-        frm.remove_custom_button(__('Set as Lost'));
+        addReopenButton(frm);
+        removeSetAsLostButton(frm);
+        setTimeout(() => removeSetAsLostButton(frm), 500);
     },
 
     party_name(frm) {

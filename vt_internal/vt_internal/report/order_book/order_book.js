@@ -46,6 +46,41 @@ frappe.query_reports["Order book"] = {
                 }
             }
         }
+        if (column.fieldname === "custom_construction_status" && data) {
+            const display = value ? value.replace(/\n/g, '<br>') : '<em style="color:#888">Cliquer pour modifier</em>';
+            html = `<div class="editable-construction-status" data-name="${data.name}" style="cursor:pointer; min-height:20px;">${display}</div>`;
+        }
         return html;
+    },
+    onload: function(report) {
+        report.$report.on('click', '.editable-construction-status', function() {
+            const name = $(this).data('name');
+            const current_value = $(this).text() === 'Cliquer pour modifier' ? '' : $(this).html().replace(/<br>/g, '\n');
+
+            const d = new frappe.ui.Dialog({
+                title: __('Modifier le statut construction'),
+                fields: [
+                    { fieldname: 'status', fieldtype: 'Small Text', label: __('Statut construction'), default: current_value }
+                ],
+                primary_action_label: __('Enregistrer'),
+                primary_action(values) {
+                    frappe.call({
+                        method: 'frappe.client.set_value',
+                        args: {
+                            doctype: 'Sales Order',
+                            name: name,
+                            fieldname: 'custom_construction_status',
+                            value: values.status
+                        },
+                        callback: () => {
+                            frappe.show_alert({ message: __('Statut mis à jour'), indicator: 'green' });
+                            report.refresh();
+                        }
+                    });
+                    d.hide();
+                }
+            });
+            d.show();
+        });
     }
 };

@@ -17,8 +17,8 @@ def execute(filters: dict | None = None):
 	columns = get_columns()
 	data = get_data(filters)
 	# Compute remaining amount (HT) and total hours for report summary
-	remaining_ht = sum(row[11] for row in data)
-	total_hours = sum((row[8] or 0) for row in data)
+	remaining_ht = sum(row[12] for row in data)
+	total_hours = sum((row[9] or 0) for row in data)
 	report_summary = [
 		{ "value": len(data), "label": _("Nombre de commande"), "datatype": "Int" },
 		{ "value": total_hours, "label": _("Heures"), "datatype": "Float" },
@@ -33,8 +33,9 @@ def get_columns() -> list[dict]:
 		{"label": _("Désignation"),            "fieldname": "name",               "fieldtype": "Link",     "options": "Sales Order", "width": 150},
 		{"label": _("Client"),                 "fieldname": "customer_name",      "fieldtype": "Data",     "width": 180},
 		{"label": _("Statut"),                 "fieldname": "status",             "fieldtype": "Data",     "width": 150},
+		{"label": _("Statut construction"),    "fieldname": "custom_construction_status", "fieldtype": "Small Text", "width": 200},
 		{"label": _("Date"),                   "fieldname": "transaction_date",   "fieldtype": "Date",     "width": 100},
-		{"label": _("Age (J)"),                    "fieldname": "age",                "fieldtype": "Int",      "width": 80},
+		{"label": _("Age (J)"),                "fieldname": "age",                "fieldtype": "Int",      "width": 80},
 		{"label": _("Date de livraison"),      "fieldname": "delivery_date",      "fieldtype": "Date",     "width": 100},
 		{"label": _("Référence pièce"),        "fieldname": "reference_piece",              "fieldtype": "Data",     "width": 120},
 		{"label": _("Responsable du devis"),   "fieldname": "custom_responsable_du_devis", "fieldtype": "Link", "options": "User", "width": 150},
@@ -71,6 +72,7 @@ def get_data(filters: dict | None = None) -> list[list]:
 		"Sales Order",
 		fields=["name", "customer", "status", "transaction_date", "delivery_date",
 				"reference_piece", "custom_responsable_du_devis", "custom_labour_hours", "total", "per_billed",
+				"custom_construction_status",
 				"per_delivered", "skip_delivery_note", "grand_total",
 				"custom_statut_fiche_de_travail", "custom_per_received", "custom_payment_request_status"],
 		filters=query_filters,
@@ -88,6 +90,7 @@ def get_data(filters: dict | None = None) -> list[list]:
 			order.get("name"),
 			order.get("customer"),
 			order.get("status"),
+			order.get("custom_construction_status"),
 			txn_date,
 			age,
 			order.get("delivery_date"),
