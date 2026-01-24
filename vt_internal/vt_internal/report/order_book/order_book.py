@@ -33,7 +33,7 @@ def get_columns() -> list[dict]:
 		{"label": _("Désignation"),            "fieldname": "name",               "fieldtype": "Link",     "options": "Sales Order", "width": 150},
 		{"label": _("Client"),                 "fieldname": "customer_name",      "fieldtype": "Data",     "width": 180},
 		{"label": _("Statut"),                 "fieldname": "status",             "fieldtype": "Data",     "width": 150},
-		{"label": _("Statut construction"),    "fieldname": "custom_construction_status", "fieldtype": "Small Text", "width": 200},
+		{"label": _("Statut du chantier"),    "fieldname": "custom_construction_status", "fieldtype": "Small Text", "width": 200},
 		{"label": _("Date"),                   "fieldname": "transaction_date",   "fieldtype": "Date",     "width": 100},
 		{"label": _("Age (J)"),                "fieldname": "age",                "fieldtype": "Int",      "width": 80},
 		{"label": _("Date de livraison"),      "fieldname": "delivery_date",      "fieldtype": "Date",     "width": 100},
