@@ -13,6 +13,7 @@ def project_details():
         )
         return [{
             "doctype": "<span class='badge badge-danger'>Dépense</span>",
+            "doctype_label": "Dépense",
             "name": f"<a href={frappe.utils.get_url_to_form('Expense', i.name)}>{i.name}</a>",
             "status": i.custom_état,
             "description": frappe.utils.fmt_money(i.net_amount, currency='EUR'),
@@ -26,6 +27,7 @@ def project_details():
         )
         return [{
             "doctype": "<span class='badge badge-warning'>Ecriture de paiement</span>",
+            "doctype_label": "Ecriture de paiement",
             "name": f"<a href={frappe.utils.get_url_to_form('Payment Entry', i.name)}>{i.name}</a>",
             "status": i.status,
             "description": frappe.utils.fmt_money(i.paid_amount, currency='EUR') + (i.mode_of_payment or "") + " " + _(i.payment_type, context='Payment Entry'),
@@ -41,6 +43,7 @@ def project_details():
         total_purchase_order = sum(i.total for i in pos)
         items = [{
             "doctype": "<span class='badge badge-secondary'>Commande fournisseur</span>",
+            "doctype_label": "Commande fournisseur",
             "name": f"<a href={frappe.utils.get_url_to_form('Purchase Order', i.name)}>{i.name}</a>",
             "status": i.status,
             "description": frappe.utils.fmt_money(i.total, currency='EUR') + i.supplier,
@@ -55,6 +58,7 @@ def project_details():
         )
         return [{
             "doctype": "<span class='badge badge-secondary'>Visite technique</span>",
+            "doctype_label": "Visite technique",
             "name": f"<a href={frappe.utils.get_url_to_form('Visite Technique', i.name)}>{i.name}</a>",
             "status": i.status,
             "description": f"{sum(1 for p in [i.plans, i.photo_2, i.photo_3, i.photo_4, i.photo_5] if p)} photos",
@@ -68,6 +72,7 @@ def project_details():
         )
         return [{
             "doctype": "<span class='badge badge-secondary' style='background-color: #52159e'>Fiche de travail</span>",
+            "doctype_label": "Fiche de travail",
             "name": f"<a href={frappe.utils.get_url_to_form('Fiche de travail', i.name)}>{i.name}</a>",
             "status": i.status,
             "description": "",
@@ -91,6 +96,7 @@ def project_details():
         total_manufacturing_cost = sum(i.manufacturing_costs for i in fab)
         items = [{
             "doctype": "<span class='badge badge-secondary'>Fabrication</span>",
+            "doctype_label": "Fabrication",
             "name": f"<a href={frappe.utils.get_url_to_form('Fabrication VT', i.name)}>{i.quantity} x {i.article}</a>",
             "status": i.status,
             "description": frappe.utils.fmt_money(i.manufacturing_costs, currency='EUR'),
@@ -107,6 +113,7 @@ def project_details():
         )
         return [{
             "doctype": "<span class='badge badge-danger'>Facture d'achat</span>",
+            "doctype_label": "Facture d'achat",
             "name": f"<a href={frappe.utils.get_url_to_form('Purchase Invoice', i.name)}>{i.name}</a>",
             "status": i.status,
             "description": frappe.utils.fmt_money(i.total, currency='EUR') + (i.custom_mode_of_paiement or ""),
@@ -120,6 +127,7 @@ def project_details():
         )
         return [{
             "doctype": "<span class='badge badge-success'>Facture d'acompte</span>" if i.is_down_payment_invoice else "<span class='badge badge-success'>Facture de vente</span>",
+            "doctype_label": "Facture d'acompte" if i.is_down_payment_invoice else "Facture de vente",
             "name": f"<a href={frappe.utils.get_url_to_form('Sales Invoice', i.name)}>{i.name}</a>",
             "status": i.status,
             "description": frappe.utils.fmt_money(i.grand_total if i.is_down_payment_invoice else i.total, currency='EUR'),
@@ -133,6 +141,7 @@ def project_details():
         )
         return [{
             "doctype": "<span class='badge badge-dark'>Incident Qualité</span>",
+            "doctype_label": "Incident Qualité",
             "name": f"<a href={frappe.utils.get_url_to_form('Quality Incident', i.name)}>{i.object}</a>",
             "status": i.status,
             "description": (i.origine or "") + " " + frappe.utils.fmt_money(i.total_costs, currency='EUR'),
@@ -146,6 +155,7 @@ def project_details():
         )
         return [{
             "doctype": "<span class='badge badge-success' style='background-color: #0f0bcf'>Réception de travaux</span>",
+            "doctype_label": "Réception de travaux",
             "name": f"<a href={frappe.utils.get_url_to_form('Work Completion Receipt', i.name)}>{i.name}</a>",
             "status": "Non signé" if i.docstatus == 0 else "Signé",
             "description": "",
@@ -159,6 +169,7 @@ def project_details():
         )
         return [{
             "doctype": "<span class='badge badge-info' style='background-color: #6fc5e8;'>Devis fournisseur</span>",
+            "doctype_label": "Devis fournisseur",
             "name": f"<a href={frappe.utils.get_url_to_form('Supplier Quotation', i.name)}>{i.name}</a>",
             "status": i.status,
             "description": frappe.utils.fmt_money(i.total, currency='EUR') + " " + i.supplier_name,
@@ -172,6 +183,7 @@ def project_details():
         )
         return [{
             "doctype": "<span class='badge badge-info'>Devis</span>",
+            "doctype_label": "Devis",
             "name": f"<a href={frappe.utils.get_url_to_form('Quotation', i.name)}>{i.name}</a>",
             "status": i.status,
             "description": frappe.utils.fmt_money(i.total, currency='EUR'),
@@ -185,6 +197,7 @@ def project_details():
         )
         return [{
             "doctype": "<span class='badge badge-info'>Bon de livraison</span>",
+            "doctype_label": "Bon de livraison",
             "name": f"<a href={frappe.utils.get_url_to_form('Delivery Note', i.name)}>{i.name}</a>",
             "status": i.status,
             "description": "Livré" if i.custom_livré else "",
@@ -198,6 +211,7 @@ def project_details():
         )
         items = [{
             "doctype": "<span class='badge badge-info'>Commande client</span>",
+            "doctype_label": "Commande client",
             "name": f"<a href={frappe.utils.get_url_to_form('Sales Order', i.name)}>{i.name}</a>",
             "status": i.status,
             "description": frappe.utils.fmt_money(i.total, currency='EUR'),
@@ -348,7 +362,7 @@ def project_details():
     """ if events else ""
 
     content_rows = [
-        f"""<tr>
+        f"""<tr data-doctype="{i["doctype_label"]}">
                 <td>{i["doctype"]}</td>
                 <td>{i["name"]}</td>
                 <td>{i["description"]}</td>
@@ -357,6 +371,10 @@ def project_details():
             </tr>""" for i in items
         ]
     content = "".join(content_rows)
+
+    # Générer les options du filtre à partir des types de documents présents
+    doctype_labels = sorted(set(i["doctype_label"] for i in items))
+    filter_options = "".join([f'<option value="{label}">{label}</option>' for label in doctype_labels])
     html = f"""<div>
         <div style="display: flex; flex-direction: row; justify-content: space-between;">
             <div style="width: 45%">
@@ -391,10 +409,15 @@ def project_details():
             <p style="color: blue; font-size: 24px; margin: 5px 0;">{frappe.utils.fmt_money(vente - total_expenses, currency='EUR')}</p>
           </div>
         </div>
-        <table class="table">
+        <table class="table" id="documents-table">
             <thead>
                 <tr>
-                  <th scope="col">Type de document</th>
+                  <th scope="col">
+                    <select id="doctype-filter" style="border: none; background: transparent; font-weight: bold; cursor: pointer; padding: 0; font-size: inherit;">
+                        <option value="">Type de document</option>
+                        {filter_options}
+                    </select>
+                  </th>
                   <th scope="col">Nom</th>
                   <th scope="col">Description</th>
                   <th scope="col">Statut</th>
@@ -405,6 +428,19 @@ def project_details():
     {content}
             </tbody>
         </table>
+        <script>
+            document.getElementById('doctype-filter').addEventListener('change', function() {{
+                var filter = this.value;
+                var rows = document.querySelectorAll('#documents-table tbody tr');
+                rows.forEach(function(row) {{
+                    if (!filter || row.getAttribute('data-doctype') === filter) {{
+                        row.style.display = '';
+                    }} else {{
+                        row.style.display = 'none';
+                    }}
+                }});
+            }});
+        </script>
         <p style="color: black; font-size: 16px; font-weight: bolder;">Durée totale du projet: {temps_du_projet} jours</p>
 {events_html}
         </div>"""
