@@ -45,6 +45,12 @@ frappe.query_reports["👷Chantiers"] = {
 			"fieldtype": "Link",
 			"options": "User",
 		},
+		{
+			"fieldname": "project_manager",
+			"label": __("Responsable du devis"),
+			"fieldtype": "Link",
+			"options": "User",
+		},
 	],
 
 	formatter: function(value, row, column, data, default_formatter) {

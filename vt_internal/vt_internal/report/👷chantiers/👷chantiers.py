@@ -44,6 +44,9 @@ def execute(filters: dict | None = None):
 	if filters.get('construction_manager'):
 		where.append("p.custom_construction_manager = %s")
 		params.append(filters.get('construction_manager'))
+	if filters.get('project_manager'):
+		where.append("p.custom_project_manager = %s")
+		params.append(filters.get('project_manager'))
 
 	sql = f"""
 		SELECT
@@ -92,6 +95,9 @@ def execute(filters: dict | None = None):
 	if filters.get('construction_manager'):
 		where_on_project.append("p.custom_construction_manager = %s")
 		params_on_project.append(filters.get('construction_manager'))
+	if filters.get('project_manager'):
+		where_on_project.append("p.custom_project_manager = %s")
+		params_on_project.append(filters.get('project_manager'))
 
 	sql_on_project = f"""
 		SELECT SUM(d.hours) AS hours
@@ -160,7 +166,7 @@ def execute(filters: dict | None = None):
 		p = frappe.db.get_value(
 			"Project",
 			project_name,
-			["status", 'project_type', 'expected_end_date', 'customer', 'total_sales_amount', 'custom_construction_manager'],
+			["status", 'project_type', 'expected_end_date', 'customer', 'total_sales_amount', 'custom_construction_manager', 'custom_project_manager'],
 			as_dict=True
 		)
 
@@ -177,6 +183,10 @@ def execute(filters: dict | None = None):
 
 		# Filtre par conducteur de travaux
 		if filters.get('construction_manager') and p.custom_construction_manager != filters.get('construction_manager'):
+			continue
+
+		# Filtre par responsable du devis
+		if filters.get('project_manager') and p.custom_project_manager != filters.get('project_manager'):
 			continue
 
 		# Déterminer si le chantier est facturé (statut Completed)
@@ -295,6 +305,11 @@ def execute(filters: dict | None = None):
 		ca_periode_where.append("p.custom_construction_manager = %s")
 		ca_periode_params.append(filters.get('construction_manager'))
 
+	# Filtre par responsable du devis
+	if filters.get('project_manager'):
+		ca_periode_where.append("p.custom_project_manager = %s")
+		ca_periode_params.append(filters.get('project_manager'))
+
 	ca_periode_sql = f"""
 		SELECT SUM(si.total) AS ca_total
 		FROM `tabSales Invoice` si
@@ -327,12 +342,17 @@ def execute(filters: dict | None = None):
 	where_heures_realisees.append("t.end_date BETWEEN %s AND %s")
 	params_heures_realisees.extend([start_date, end_date])
 
-	# Jointure et filtre par conducteur de travaux
+	# Jointure et filtre par conducteur de travaux / responsable du devis
 	join_project_heures = ""
 	if filters.get('construction_manager'):
 		join_project_heures = "LEFT JOIN `tabProject` p ON p.name = d.project"
 		where_heures_realisees.append("p.custom_construction_manager = %s")
 		params_heures_realisees.append(filters.get('construction_manager'))
+	if filters.get('project_manager'):
+		if not join_project_heures:
+			join_project_heures = "LEFT JOIN `tabProject` p ON p.name = d.project"
+		where_heures_realisees.append("p.custom_project_manager = %s")
+		params_heures_realisees.append(filters.get('project_manager'))
 
 	sql_heures_realisees = f"""
 		SELECT SUM(d.hours) AS hours
