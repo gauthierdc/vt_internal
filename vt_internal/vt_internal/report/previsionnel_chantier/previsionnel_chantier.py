@@ -63,6 +63,7 @@ def get_columns(grouped_by):
 			{"label": _("Type de projet"), "fieldname": "project_type", "fieldtype": "Link", "options": "Project Type", "width": 120},
 			{"label": _("Incidents"), "fieldname": "incidents", "fieldtype": "HTML", "width": 100},
 			{"label": _("Heures prévues"), "fieldname": "heures_prevues", "fieldtype": "Float", "width": 120},
+			{"label": _("Événements"), "fieldname": "evenements", "fieldtype": "HTML", "width": 300},
 		]
 	else:
 		return [
@@ -70,6 +71,7 @@ def get_columns(grouped_by):
 			{"label": _("Nom"), "fieldname": "employee_name", "fieldtype": "Data", "width": 180},
 			{"label": _("Heures prévues"), "fieldname": "heures_prevues", "fieldtype": "Float", "width": 120},
 			{"label": _("Nombre de projets"), "fieldname": "nb_projets", "fieldtype": "Int", "width": 120},
+			{"label": _("Événements"), "fieldname": "evenements", "fieldtype": "HTML", "width": 300},
 		]
 
 
@@ -96,6 +98,10 @@ def get_data(filters, grouped_by):
 		conditions.append("p.custom_construction_manager = %(construction_manager)s")
 		params["construction_manager"] = filters.get("construction_manager")
 
+	if filters.get("company"):
+		conditions.append("p.company = %(company)s")
+		params["company"] = filters.get("company")
+
 	where_clause = " AND ".join(conditions)
 
 	sql = f"""
@@ -105,6 +111,8 @@ def get_data(filters, grouped_by):
 			e.custom_employé AS employee,
 			e.starts_on,
 			e.ends_on,
+			e.color,
+			e.subject,
 			p.customer,
 			p.total_sales_amount AS ca_projet,
 			p.project_type,
@@ -131,6 +139,7 @@ def aggregate_by_project(events):
 		"ca_projet": 0,
 		"project_type": None,
 		"heures_prevues": 0,
+		"events_list": [],
 	})
 
 	for event in events:
@@ -144,16 +153,25 @@ def aggregate_by_project(events):
 		project_data[project]["ca_projet"] = event.get("ca_projet") or 0
 		project_data[project]["project_type"] = event.get("project_type")
 		project_data[project]["heures_prevues"] += hours
+		project_data[project]["events_list"].append({
+			"name": event.get("event_name"),
+			"starts_on": event.get("starts_on"),
+			"hours": hours,
+			"color": event.get("color"),
+			"subject": event.get("subject"),
+		})
 
 	data = []
 	for project, info in project_data.items():
 		incidents = get_quality_incidents(project)
+		evenements = format_events_badges(info["events_list"])
 
 		data.append({
 			"project": project,
 			"customer": info["customer"],
 			"ca_projet": info["ca_projet"],
 			"project_type": info["project_type"],
+			"evenements": evenements,
 			"incidents": incidents,
 			"heures_prevues": round(info["heures_prevues"], 2),
 		})
@@ -163,12 +181,36 @@ def aggregate_by_project(events):
 	return data
 
 
+def format_events_badges(events_list):
+	"""Format events as HTML badges with date and duration."""
+	if not events_list:
+		return ""
+
+	badges = []
+	for event in events_list:
+		color = event.get("color") or "#6c757d"
+		starts_on = event.get("starts_on")
+		hours = event.get("hours") or 0
+		name = event.get("name")
+		subject = event.get("subject") or ""
+
+		date_str = frappe.utils.format_date(starts_on, "dd/MM") if starts_on else ""
+		hours_str = f"{hours:.1f}h" if hours else ""
+		label = f"{date_str} {hours_str}".strip()
+
+		badge = f'<a href="#" onclick="frappe.set_route(\'Form\', \'Event\', \'{name}\'); return false;" title="{subject}"><span class="badge" style="background-color: {color}; color: white; cursor: pointer; margin: 2px;">{label}</span></a>'
+		badges.append(badge)
+
+	return " ".join(badges)
+
+
 def aggregate_by_employee(events):
 	"""Aggregate events by employee."""
 	employee_data = defaultdict(lambda: {
 		"employee_name": None,
 		"heures_prevues": 0,
 		"projects": set(),
+		"events_list": [],
 	})
 
 	for event in events:
@@ -182,14 +224,24 @@ def aggregate_by_employee(events):
 		employee_data[employee]["heures_prevues"] += hours
 		if event.get("project"):
 			employee_data[employee]["projects"].add(event.get("project"))
+		employee_data[employee]["events_list"].append({
+			"name": event.get("event_name"),
+			"starts_on": event.get("starts_on"),
+			"hours": hours,
+			"color": event.get("color"),
+			"subject": event.get("subject"),
+		})
 
 	data = []
 	for employee, info in employee_data.items():
+		evenements = format_events_badges(info["events_list"])
+
 		data.append({
 			"employee": employee,
 			"employee_name": info["employee_name"],
 			"heures_prevues": round(info["heures_prevues"], 2),
 			"nb_projets": len(info["projects"]),
+			"evenements": evenements,
 		})
 
 	data.sort(key=lambda x: x["heures_prevues"], reverse=True)
