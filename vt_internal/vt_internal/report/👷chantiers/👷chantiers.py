@@ -114,20 +114,23 @@ def execute(filters: dict | None = None):
 	pct_chantier = round(total_hours_on_project / total_hours_all * 100) if total_hours_all > 0 else 0
 
 	columns = [
-		"Client::200",
-		"Projet::200",
-		"CA (HT):Currency:120",
-		"Marge %::150",
-		"Heures::150",
-		"(dont période):Int:80",
-		"Type de projet::120",
-		"Date de fin:Date:100",
-		"Réception::50",
-		"Incident::100",
+		{"fieldname": "client", "label": "Client", "fieldtype": "Data", "width": 200},
+		{"fieldname": "projet", "label": "Projet", "fieldtype": "Data", "width": 200},
+		{"fieldname": "ca_ht", "label": "CA (HT)", "fieldtype": "Currency", "width": 120},
+		{"fieldname": "marge", "label": "Marge %", "fieldtype": "Data", "width": 150},
+		{"fieldname": "heures", "label": "Heures", "fieldtype": "Data", "width": 150},
+		{"fieldname": "heures_periode", "label": "(dont période)", "fieldtype": "Int", "width": 80},
+		{"fieldname": "type_projet", "label": "Type de projet", "fieldtype": "Data", "width": 120},
+		{"fieldname": "date_fin", "label": "Date de fin", "fieldtype": "Date", "width": 100},
+		{"fieldname": "reception", "label": "Réception", "fieldtype": "Data", "width": 50},
+		{"fieldname": "incident", "label": "Incident", "fieldtype": "Data", "width": 100},
 	]
 
 	mydata = []
 	total_ca = 0
+	total_hours_actual = 0
+	total_hours_expected = 0
+	total_hours_periode = 0
 	
 	# Compteurs pour le header
 	nb_chantiers_factures_periode = 0  # Chantiers dont statut est Completed
@@ -225,6 +228,11 @@ def execute(filters: dict | None = None):
 			nb_chantiers_en_cours += 1
 			hours_en_cours_periode += hours_periode
 
+		# Totaux pour la ligne somme
+		total_hours_actual += hours_total_project
+		total_hours_expected += hours_expected
+		total_hours_periode += hours_periode
+
 		# CA (facturé sur la période uniquement)
 		ca = round(ca_by_project.get(project_name, 0))
 		total_ca += ca
@@ -257,19 +265,35 @@ def execute(filters: dict | None = None):
 		# Heures combinées total/prévu/écart
 		heures_combined = f"{hours_total_project}|{hours_expected}|{hours_diff_int}"
 
-		mydata.append([
-			p.customer or '',
-			project_link,
-			ca,
-			marge_combined,
-			heures_combined,
-			hours_periode,
-			p.project_type or '',
-			date,
-			reception_link,
-			incident_link,
-		])
+		mydata.append({
+			"client": p.customer or '',
+			"projet": project_link,
+			"ca_ht": ca,
+			"marge": marge_combined,
+			"heures": heures_combined,
+			"heures_periode": hours_periode,
+			"type_projet": p.project_type or '',
+			"date_fin": date,
+			"reception": reception_link,
+			"incident": incident_link,
+		})
 
+
+	# Ligne somme manuelle avec heures réalisées et prévues
+	total_hours_diff = total_hours_actual - total_hours_expected
+	mydata.append({
+		"client": "Total",
+		"projet": "",
+		"ca_ht": total_ca,
+		"marge": "",
+		"heures": f"{total_hours_actual}|{total_hours_expected}|{total_hours_diff}",
+		"heures_periode": total_hours_periode,
+		"type_projet": "",
+		"date_fin": "",
+		"reception": "",
+		"incident": "",
+		"is_total_row": 1,
+	})
 
 	# Calcul du CA de la période
 	# Récupération des factures qui ne sont pas des acomptes, en docstatus=1,
