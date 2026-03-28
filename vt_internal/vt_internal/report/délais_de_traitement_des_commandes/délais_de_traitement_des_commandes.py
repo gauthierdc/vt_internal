@@ -29,6 +29,7 @@ def get_columns():
 		{"label": _("Responsable du devis"), "fieldname": "project_manager", "fieldtype": "Link", "options": "User", "width": 160},
 		{"label": _("Responsable chantier"), "fieldname": "construction_manager", "fieldtype": "Link", "options": "User", "width": 160},
 		{"label": _("Montant cmd HT (€)"), "fieldname": "montant_commande", "fieldtype": "Currency", "width": 130},
+		{"label": _("J. Création→Envoi"), "fieldname": "j_creation_envoi", "fieldtype": "Int", "width": 120},
 		{"label": _("J. Devis→Cmd"), "fieldname": "j_devis_commande", "fieldtype": "Int", "width": 110},
 		{"label": _("J. Cmd→Réception"), "fieldname": "j_commande_reception", "fieldtype": "Int", "width": 120},
 		{"label": _("J. Réception→Fact."), "fieldname": "j_reception_facture", "fieldtype": "Int", "width": 120},
@@ -54,6 +55,7 @@ def get_data(filters):
 			so.transaction_date AS date_commande,
 			p.total_sales_amount AS montant_commande,
 			q.creation AS date_devis,
+			sd.date_envoi_devis AS date_envoi_devis,
 			MIN(wcr.le) AS date_reception,
 			MIN(CASE WHEN IFNULL(si.is_down_payment_invoice, 0) = 0 THEN si.posting_date END) AS date_facture,
 			MAX(pe.reference_date) AS date_paiement
@@ -69,6 +71,13 @@ def get_data(filters):
 		) vt_q ON vt_q.projet = p.name
 		LEFT JOIN `tabQuotation` q
 			ON q.name = vt_q.quotation AND q.docstatus IN (0, 1)
+		LEFT JOIN (
+			SELECT parent, MIN(creation) AS date_envoi_devis
+			FROM `tabSuivi Devis`
+			WHERE parenttype = 'Quotation'
+			  AND (statut IS NULL OR statut != 'En attente réponse fournisseur')
+			GROUP BY parent
+		) sd ON sd.parent = q.name
 		LEFT JOIN `tabWork Completion Receipt` wcr
 			ON wcr.project = p.name AND wcr.docstatus = 1
 		LEFT JOIN `tabSales Invoice` si
@@ -86,13 +95,15 @@ def get_data(filters):
 		if not row.date_commande:
 			continue
 
-		# Fallback: si pas de réception, utiliser la date facture
-		date_reception = row.date_reception or row.date_facture
+		# Fallback pour j_commande_reception : si pas de réception réelle, utiliser la date facture
+		date_reception_ou_facture = row.date_reception or row.date_facture
 
 		# Calcul des durées entre étapes
+		j_creation_envoi = safe_date_diff(row.date_envoi_devis, row.date_devis)
 		j_devis_commande = safe_date_diff(row.date_commande, row.date_devis)
-		j_commande_reception = safe_date_diff(date_reception, row.date_commande)
-		j_reception_facture = safe_date_diff(row.date_facture, date_reception)
+		j_commande_reception = safe_date_diff(date_reception_ou_facture, row.date_commande)
+		# j_reception_facture : uniquement avec la réception réelle (WCR), sinon None pour éviter les 0 artificiels
+		j_reception_facture = safe_date_diff(row.date_facture, row.date_reception)
 		j_facture_paiement = safe_date_diff(row.date_paiement, row.date_facture)
 		j_total = safe_date_diff(row.date_paiement, row.date_devis, allow_negative=False)
 
@@ -105,10 +116,12 @@ def get_data(filters):
 			"construction_manager": row.construction_manager,
 			"montant_commande": flt(row.montant_commande),
 			"date_devis": row.date_devis,
+			"date_envoi_devis": row.date_envoi_devis,
 			"date_commande": row.date_commande,
-			"date_reception": date_reception,
+			"date_reception": date_reception_ou_facture,
 			"date_facture": row.date_facture,
 			"date_paiement": row.date_paiement,
+			"j_creation_envoi": j_creation_envoi,
 			"j_devis_commande": j_devis_commande,
 			"j_commande_reception": j_commande_reception,
 			"j_reception_facture": j_reception_facture,
@@ -182,6 +195,7 @@ def safe_date_diff(date1, date2, allow_negative=False):
 def generate_chart_html(data):
 	"""Generate a pie chart showing average duration per step."""
 	steps = [
+		("j_creation_envoi", "Création → Envoi devis"),
 		("j_devis_commande", "Devis → Commande"),
 		("j_commande_reception", "Commande → Réception"),
 		("j_reception_facture", "Réception → Facture"),
@@ -203,7 +217,7 @@ def generate_chart_html(data):
 
 	labels_json = json.dumps(labels)
 	values_json = json.dumps(values)
-	colors = ["#5e64ff", "#743ee2", "#ff5858", "#ffa00a"]
+	colors = ["#28a745", "#5e64ff", "#743ee2", "#ff5858", "#ffa00a"]
 	colors_json = json.dumps(colors)
 
 	legend_html = "".join([

@@ -67,11 +67,12 @@ frappe.query_reports["Délais de traitement des commandes"] = {
         value = default_formatter(value, row, column, data);
 
         const duration_fields = [
-            "j_devis_commande", "j_commande_reception",
+            "j_creation_envoi", "j_devis_commande", "j_commande_reception",
             "j_reception_facture", "j_facture_paiement", "j_total"
         ];
 
         const thresholds = {
+            "j_creation_envoi": { warn: 3, alert: 7 },
             "j_devis_commande": { warn: 7, alert: 14 },
             "j_commande_reception": { warn: 14, alert: 21 },
             "j_reception_facture": { warn: 7, alert: 14 },
