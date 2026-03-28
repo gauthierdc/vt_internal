@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
+  "skill_for_vt_bot",
   "prompt"
  ],
  "fields": [
@@ -16,6 +17,13 @@
    "label": "Titre",
    "reqd": 1,
    "in_list_view": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "skill_for_vt_bot",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Skill for VT Bot"
   },
   {
    "fieldname": "prompt",

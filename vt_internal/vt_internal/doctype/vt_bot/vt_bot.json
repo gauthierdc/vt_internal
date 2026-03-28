@@ -1,0 +1,63 @@
+{
+ "actions": [],
+ "creation": "2026-03-28 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "anthropic_api_key",
+  "e2b_api_key",
+  "section_break_erp",
+  "erp_api_key",
+  "erp_secret_api"
+ ],
+ "fields": [
+  {
+   "fieldname": "anthropic_api_key",
+   "fieldtype": "Password",
+   "label": "Anthropic API Key"
+  },
+  {
+   "fieldname": "e2b_api_key",
+   "fieldtype": "Password",
+   "label": "E2B API Key"
+  },
+  {
+   "fieldname": "section_break_erp",
+   "fieldtype": "Section Break",
+   "label": "ERP"
+  },
+  {
+   "fieldname": "erp_api_key",
+   "fieldtype": "Password",
+   "label": "ERP API Key"
+  },
+  {
+   "fieldname": "erp_secret_api",
+   "fieldtype": "Password",
+   "label": "ERP Secret API"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-03-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "VT internal",
+ "name": "VT Bot",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 0,
+   "role": "System Manager",
+   "select": 0,
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "track_changes": 1
+}

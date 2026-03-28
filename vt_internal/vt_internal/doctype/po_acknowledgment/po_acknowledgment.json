@@ -1,0 +1,171 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:ARC-{YY}{MM}-{###}",
+ "creation": "2026-03-28 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "email_append_to": 1,
+ "sender_field": "sender_email",
+ "sender_name_field": "sender_name",
+ "subject_field": "subject",
+ "engine": "InnoDB",
+ "field_order": [
+  "subject",
+  "status",
+  "column_break_header",
+  "sender_name",
+  "sender_email",
+  "received_on",
+  "section_break_supplier",
+  "supplier",
+  "purchase_order",
+  "column_break_supplier",
+  "communication",
+  "section_break_content",
+  "content"
+ ],
+ "fields": [
+  {
+   "fieldname": "subject",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sujet"
+  },
+  {
+   "default": "New",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Statut",
+   "options": "New\nMatched\nProcessed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sender_name",
+   "fieldtype": "Data",
+   "label": "Nom exp\u00e9diteur",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sender_email",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Email exp\u00e9diteur",
+   "options": "Email",
+   "read_only": 1
+  },
+  {
+   "default": "Now",
+   "fieldname": "received_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Re\u00e7u le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_supplier",
+   "fieldtype": "Section Break",
+   "label": "Fournisseur & Commande"
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Fournisseur",
+   "options": "Supplier",
+   "search_index": 1
+  },
+  {
+   "fieldname": "purchase_order",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Bon de commande",
+   "options": "Purchase Order",
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_supplier",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "communication",
+   "fieldtype": "Link",
+   "label": "Communication source",
+   "options": "Communication",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_content",
+   "fieldtype": "Section Break",
+   "label": "Contenu"
+  },
+  {
+   "fieldname": "content",
+   "fieldtype": "Long Text",
+   "label": "Corps du message"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-03-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "VT internal",
+ "name": "PO Acknowledgment",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Purchase Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "received_on",
+ "sort_order": "DESC",
+ "states": [
+  {
+   "color": "Blue",
+   "title": "New"
+  },
+  {
+   "color": "Orange",
+   "title": "Matched"
+  },
+  {
+   "color": "Green",
+   "title": "Processed"
+  }
+ ],
+ "title_field": "subject",
+ "track_changes": 1
+}
