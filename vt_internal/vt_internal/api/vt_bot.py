@@ -39,7 +39,12 @@ def run_on_po_acknowledgment(docname):
 		"name",
 	)
 
-	sandbox = Sandbox(api_key=e2b_key)
+	import os
+	import logging
+	logging.getLogger("e2b").setLevel(logging.WARNING)
+
+	os.environ["E2B_API_KEY"] = e2b_key
+	sandbox = Sandbox.create(timeout=1000)
 	try:
 		# Upload des skills dans ~/.claude/skills/<nom>/SKILL.md
 		for skill in skills:
@@ -57,8 +62,11 @@ def run_on_po_acknowledgment(docname):
 		)
 		sandbox.files.write("/home/user/opencode.json", config.encode())
 
+		# Installation des dépendances système
+		sandbox.commands.run("sudo apt-get install -y poppler-utils 2>/dev/null || true", timeout=60)
+
 		# Installation OpenCode
-		sandbox.commands.run("sudo npm install -g opencode-ai", timeout=120)
+		sandbox.commands.run("sudo npm install -g opencode-ai", timeout=180)
 
 		# Construction du prompt
 		communication_url = (
@@ -80,8 +88,8 @@ def run_on_po_acknowledgment(docname):
 		result = sandbox.commands.run(
 			f'cd /home/user && ANTHROPIC_API_KEY={anthropic_key}'
 			f' ERP_API_KEY={erp_api_key} ERP_SECRET_API={erp_secret_api}'
-			f' opencode run "{prompt}"',
-			timeout=300,
+			f' opencode run "{prompt}" > /tmp/opencode.log 2>&1',
+			timeout=900,
 		)
 
 		if result.stderr:

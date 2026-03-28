@@ -15,7 +15,8 @@ class POAcknowledgment(Document):
 			"vt_internal.vt_internal.api.vt_bot.run_on_po_acknowledgment",
 			docname=self.name,
 			queue="long",
-			timeout=600,
+			timeout=1200,
+			enqueue_after_commit=True,
 		)
 
 	def validate(self):
