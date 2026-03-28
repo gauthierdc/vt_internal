@@ -6,6 +6,28 @@ function addWebLinks(frm) {
     if (frm.doc.drive_url) {
         frm.add_web_link(frm.doc.drive_url, 'Lien du drive');
     }
+    if (frm.doc.name && !frm.doc.__islocal) {
+        const api = 'https://bureau.verretransparence.fr/api/method/vt_internal.vt_internal.api.quotation_details';
+        const q = encodeURIComponent(frm.doc.name);
+
+        const copyToClipboard = (text) => {
+            const el = document.createElement('textarea');
+            el.value = text;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+        };
+
+        frm.sidebar.add_user_action('Prompt analyse interne', () => {
+            copyToClipboard(`Analyse ce devis avant de l'envoyer au client : ${api}.quotation_internal?quotation=${q}`);
+            frappe.show_alert({ message: 'Prompt analyse interne copié', indicator: 'green' }, 3);
+        });
+        frm.sidebar.add_user_action('Prompt analyse client', () => {
+            copyToClipboard(`Voici un devis reçu pour des travaux de vitrerie. Analyse-le et dis-moi si les prestations sont bien décrites, si le prix te semble cohérent, et s'il manque des informations importantes : ${api}.quotation_details?quotation=${q}`);
+            frappe.show_alert({ message: 'Prompt analyse client copié', indicator: 'green' }, 3);
+        });
+    }
 }
 
 function showCustomerAlerts(frm) {
