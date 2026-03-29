@@ -63,14 +63,16 @@ def get_data(filters):
 		LEFT JOIN `tabCustomer` cust ON cust.name = p.customer
 		LEFT JOIN `tabSales Order` so
 			ON so.project = p.name AND so.docstatus = 1
-		LEFT JOIN (
-			SELECT projet, MIN(quotation) AS quotation
-			FROM `tabVisite Technique`
-			WHERE docstatus != 2 AND quotation IS NOT NULL AND quotation != ''
-			GROUP BY projet
-		) vt_q ON vt_q.projet = p.name
 		LEFT JOIN `tabQuotation` q
-			ON q.name = vt_q.quotation AND q.docstatus IN (0, 1)
+			ON q.project = p.name
+			AND q.docstatus IN (0, 1)
+			AND q.transaction_date = (
+				SELECT MAX(q2.transaction_date)
+				FROM `tabQuotation` q2
+				WHERE q2.project = p.name
+				  AND q2.docstatus IN (0, 1)
+				  AND q2.transaction_date <= so.transaction_date
+			)
 		LEFT JOIN (
 			SELECT parent, MIN(creation) AS date_envoi_devis
 			FROM `tabSuivi Devis`
