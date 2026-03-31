@@ -7,7 +7,7 @@ from frappe.utils.password import get_decrypted_password
 
 def run_on_po_acknowledgment(docname):
 	"""
-	Background job : traite un PO Acknowledgment dans un sandbox E2B via OpenCode.
+	Background job : traite un PO Acknowledgment dans un sandbox E2B via Claude Code.
 	Appelé depuis POAcknowledgment.after_insert via frappe.enqueue.
 	"""
 	from e2b_code_interpreter import Sandbox
@@ -55,40 +55,21 @@ def run_on_po_acknowledgment(docname):
 				skill.prompt.encode(),
 			)
 
-		# Config OpenCode
-		config = (
-			'{"$schema":"https://opencode.ai/config.json",'
-			'"model":"anthropic/claude-sonnet-4-5"}'
-		)
-		sandbox.files.write("/home/user/opencode.json", config.encode())
-
-		# Installation des dépendances système
-		sandbox.commands.run("sudo apt-get install -y poppler-utils 2>/dev/null || true", timeout=60)
-
-		# Installation OpenCode
-		sandbox.commands.run("sudo npm install -g opencode-ai", timeout=180)
+		# Installation Claude Code
+		sandbox.commands.run("sudo npm install -g @anthropic-ai/claude-code", timeout=180)
 
 		# Construction du prompt
-		communication_url = (
-			f"{site_url}/app/communication/{communication_name}"
-			if communication_name
-			else "non disponible"
-		)
 		prompt = (
-			f"Traite cet accusé de réception de commande fournisseur : "
-			f"{site_url}/app/po-acknowledgment/{docname} . "
-			f"La communication source (email avec pièces jointes) est : {communication_url} . "
+			f"Traite cet accusé de réception de commande fournisseur : {docname} . "
 			f"Fournisseur : {doc.supplier or 'inconnu'} . "
 			f"Sujet : {doc.subject or ''} . "
-			f"Récupère le PDF joint via l'API ERP, retrouve la commande fournisseur, "
-			f"vérifie les articles, dimensions, prix et date de livraison, "
-			f"mets à jour la commande si nécessaire et poste un commentaire de synthèse."
+			f"Utilise le skill /erp-ar-validation."
 		)
 
 		result = sandbox.commands.run(
 			f'cd /home/user && ANTHROPIC_API_KEY={anthropic_key}'
 			f' ERP_API_KEY={erp_api_key} ERP_SECRET_API={erp_secret_api}'
-			f' opencode run "{prompt}" > /tmp/opencode.log 2>&1',
+			f' claude --dangerously-skip-permissions -p "{prompt}" > /tmp/claude.log 2>&1',
 			timeout=900,
 		)
 

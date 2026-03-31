@@ -21,7 +21,6 @@
   "supplier",
   "purchase_order",
   "column_break_supplier",
-  "communication",
   "section_break_content",
   "content"
  ],
@@ -40,7 +39,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Statut",
-   "options": "New\nMatched\nProcessed",
+   "options": "New\nMatched\nIgnored\nNot found",
    "reqd": 1
   },
   {
@@ -97,13 +96,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "communication",
-   "fieldtype": "Link",
-   "label": "Communication source",
-   "options": "Communication",
-   "read_only": 1
-  },
-  {
    "fieldname": "section_break_content",
    "fieldtype": "Section Break",
    "label": "Contenu"
@@ -158,12 +150,16 @@
    "title": "New"
   },
   {
-   "color": "Orange",
+   "color": "Green",
    "title": "Matched"
   },
   {
-   "color": "Green",
-   "title": "Processed"
+   "color": "Grey",
+   "title": "Ignored"
+  },
+  {
+   "color": "Red",
+   "title": "Not found"
   }
  ],
  "title_field": "subject",

@@ -8,6 +8,9 @@ import json
 
 
 def execute(filters=None):
+	# Forcer prepared_report = 0 pour éviter le mode arrière-plan
+	frappe.db.set_value('Report', 'Délais de traitement des commandes', 'prepared_report', 0, update_modified=False)
+
 	filters = frappe._dict(filters or {})
 
 	columns = get_columns()
@@ -29,6 +32,7 @@ def get_columns():
 		{"label": _("Responsable du devis"), "fieldname": "project_manager", "fieldtype": "Link", "options": "User", "width": 160},
 		{"label": _("Responsable chantier"), "fieldname": "construction_manager", "fieldtype": "Link", "options": "User", "width": 160},
 		{"label": _("Montant cmd HT (€)"), "fieldname": "montant_commande", "fieldtype": "Currency", "width": 130},
+		{"label": _("Date commande"), "fieldname": "date_commande", "fieldtype": "Date", "width": 110},
 		{"label": _("J. Création→Envoi"), "fieldname": "j_creation_envoi", "fieldtype": "Int", "width": 120},
 		{"label": _("J. Devis→Cmd"), "fieldname": "j_devis_commande", "fieldtype": "Int", "width": 110},
 		{"label": _("J. Cmd→Réception"), "fieldname": "j_commande_reception", "fieldtype": "Int", "width": 120},
@@ -86,7 +90,7 @@ def get_data(filters):
 			ON si.project = p.name AND si.docstatus = 1
 		LEFT JOIN `tabPayment Entry` pe
 			ON pe.project = p.name AND pe.docstatus = 1 AND pe.payment_type = 'Receive'
-		WHERE 1=1
+		WHERE p.status = 'Completed'
 		{conditions}
 		GROUP BY p.name, so.name
 		ORDER BY p.name

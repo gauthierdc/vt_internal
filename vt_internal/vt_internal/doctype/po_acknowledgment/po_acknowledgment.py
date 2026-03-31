@@ -20,6 +20,8 @@ class POAcknowledgment(Document):
 		)
 
 	def validate(self):
+		if self.status in ("Ignored", "Not found"):
+			return
 		if self.purchase_order and self.status == "New":
 			self.status = "Matched"
 		if not self.purchase_order and self.status == "Matched":

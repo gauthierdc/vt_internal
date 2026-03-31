@@ -3,13 +3,6 @@
 
 frappe.ui.form.on("PO Acknowledgment", {
 	refresh: function (frm) {
-		if (frm.doc.status === "Matched" && !frm.is_new()) {
-			frm.add_custom_button(__("Marquer comme traité"), function () {
-				frm.set_value("status", "Processed");
-				frm.save();
-			}, __("Actions"));
-		}
-
 		if (frm.doc.communication && !frm.is_new()) {
 			frm.add_custom_button(__("Voir l'email source"), function () {
 				frappe.set_route("Form", "Communication", frm.doc.communication);
@@ -24,6 +17,7 @@ frappe.ui.form.on("PO Acknowledgment", {
 	},
 
 	purchase_order: function (frm) {
+		if (["Ignored", "Not found"].includes(frm.doc.status)) return;
 		if (frm.doc.purchase_order && frm.doc.status === "New") {
 			frm.set_value("status", "Matched");
 		}
@@ -39,8 +33,9 @@ frappe.listview_settings["PO Acknowledgment"] = {
 	get_indicator: function (doc) {
 		const map = {
 			New: [__("Nouveau"), "blue", "status,=,New"],
-			Matched: [__("Lié"), "orange", "status,=,Matched"],
-			Processed: [__("Traité"), "green", "status,=,Processed"],
+			Matched: [__("Lié"), "green", "status,=,Matched"],
+			Ignored: [__("Ignoré"), "grey", "status,=,Ignored"],
+			"Not found": [__("Introuvable"), "red", "status,=,Not found"],
 		};
 		return map[doc.status] || [doc.status, "grey", `status,=,${doc.status}`];
 	},
