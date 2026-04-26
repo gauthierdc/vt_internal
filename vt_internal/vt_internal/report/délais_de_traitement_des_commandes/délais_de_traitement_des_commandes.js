@@ -4,7 +4,7 @@ frappe.query_reports["Délais de traitement des commandes"] = {
             "fieldname": "from_date",
             "label": __("Date de début"),
             "fieldtype": "Date",
-            "default": frappe.datetime.add_months(frappe.datetime.get_today(), -6)
+            "default": frappe.datetime.add_months(frappe.datetime.get_today(), -1)
         },
         {
             "fieldname": "to_date",
