@@ -43,6 +43,7 @@ def get_columns() -> list[dict]:
 		{"label": _("Total (HT)"),             "fieldname": "total",              "fieldtype": "Currency", "options": "currency", "width": 120},
 		{"label": _("Pourcentage facturé"),    "fieldname": "per_billed",         "fieldtype": "Percent",  "width": 100},
 		{"label": _("Reste à facturer (HT)"),  "fieldname": "remaining_amount",   "fieldtype": "Currency", "options": "currency", "width": 150},
+		{"label": _("Événements"),             "fieldname": "evenements",          "fieldtype": "HTML",     "width": 300},
 		# Hidden columns for get_indicator
 		{"fieldname": "per_delivered",                  "fieldtype": "Percent", "hidden": 1},
 		{"fieldname": "skip_delivery_note",             "fieldtype": "Check",   "hidden": 1},
@@ -50,6 +51,7 @@ def get_columns() -> list[dict]:
 		{"fieldname": "custom_statut_fiche_de_travail", "fieldtype": "Data",    "hidden": 1},
 		{"fieldname": "custom_per_received",            "fieldtype": "Percent", "hidden": 1},
 		{"fieldname": "custom_payment_request_status",  "fieldtype": "Data",    "hidden": 1},
+		{"fieldname": "project",                         "fieldtype": "Link",    "options": "Project", "hidden": 1},
 	]
 
 
@@ -74,10 +76,13 @@ def get_data(filters: dict | None = None) -> list[list]:
 				"reference_piece", "custom_responsable_du_devis", "custom_labour_hours", "total", "per_billed",
 				"custom_construction_status",
 				"per_delivered", "skip_delivery_note", "grand_total",
-				"custom_statut_fiche_de_travail", "custom_per_received", "custom_payment_request_status"],
+				"custom_statut_fiche_de_travail", "custom_per_received", "custom_payment_request_status",
+				"project"],
 		filters=query_filters,
 		order_by="transaction_date desc"
 	)
+	project_names = list({o.get("project") for o in orders if o.get("project")})
+	events_by_project = get_events_by_project(project_names) if project_names else {}
 	today = getdate(nowdate())
 	data = []
 	for order in orders:
@@ -86,6 +91,8 @@ def get_data(filters: dict | None = None) -> list[list]:
 		total = order.get("total") or 0
 		per_billed = order.get("per_billed") or 0
 		remaining = total - (total * per_billed / 100)
+		project = order.get("project")
+		events_html = format_events_badges(events_by_project.get(project, [])) if project else ""
 		data.append([
 			order.get("name"),
 			order.get("customer"),
@@ -100,6 +107,7 @@ def get_data(filters: dict | None = None) -> list[list]:
 			total,
 			per_billed,
 			remaining,
+			events_html,
 			# Hidden fields for get_indicator
 			order.get("per_delivered"),
 			order.get("skip_delivery_note"),
@@ -107,5 +115,47 @@ def get_data(filters: dict | None = None) -> list[list]:
 			order.get("custom_statut_fiche_de_travail"),
 			order.get("custom_per_received"),
 			order.get("custom_payment_request_status"),
+			project,
 		])
 	return data
+
+
+def get_events_by_project(project_names):
+	events = frappe.get_list(
+		"Event",
+		filters={
+			"project": ["in", project_names],
+			"starts_on": [">=", nowdate()],
+		},
+		fields=["name", "project", "starts_on", "ends_on", "color", "subject"],
+		order_by="starts_on",
+	)
+	by_project = {}
+	for event in events:
+		project = event.get("project")
+		if project not in by_project:
+			by_project[project] = []
+		by_project[project].append({
+			"name": event.get("name"),
+			"starts_on": event.get("starts_on"),
+			"color": event.get("color"),
+			"subject": event.get("subject"),
+		})
+	return by_project
+
+
+def format_events_badges(events_list):
+	if not events_list:
+		return ""
+	badges = []
+	for event in events_list:
+		color = event.get("color") or "#6c757d"
+		starts_on = event.get("starts_on")
+		name = event.get("name")
+		subject = event.get("subject") or ""
+		label = frappe.utils.format_date(starts_on, "dd/MM") if starts_on else ""
+		badge = f'<a href="#" onclick="frappe.set_route(\'Form\', \'Event\', \'{name}\'); return false;" title="{subject}"><span class="badge" style="background-color: {color}; color: white; cursor: pointer; margin: 2px;">{label}</span></a>'
+		badges.append(badge)
+	return " ".join(badges)
+
+

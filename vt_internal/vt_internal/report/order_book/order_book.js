@@ -32,6 +32,9 @@ frappe.query_reports["Order book"] = {
     // Color the Status column using Sales Order listview indicator
     formatter: function(value, row, column, data, default_formatter) {
         let html = default_formatter(value, row, column, data);
+        if (column.fieldname === "name" && value && data && data.project) {
+            html = `<a href="#" onclick="openProjectDetails('${data.project}'); return false;">${value}</a>`;
+        }
         if (column.fieldname === "age" && value != null) {
             let color = value < 30 ? "green" : value < 100 ? "orange" : "red";
             html = `<span style="color:${color}">${value}</span>`;
@@ -84,3 +87,24 @@ frappe.query_reports["Order book"] = {
         });
     }
 };
+
+if (!window.openProjectDetails) {
+    window.openProjectDetails = function(project) {
+        const dialog = new frappe.ui.Dialog({
+            size: "extra-large",
+            title: __("Details du projet"),
+            fields: [{ fieldname: "content", fieldtype: "HTML" }],
+            primary_action: function() {
+                frappe.set_route('Form', "Project", project);
+            },
+            primary_action_label: __("Projet"),
+        });
+
+        frappe.call({
+            method: "vt_internal.vt_internal.api.project_details.project_details",
+            args: { project: project }
+        }).then((r) => dialog.fields_dict.content.$wrapper.html(r.message.html));
+
+        dialog.show();
+    };
+}
