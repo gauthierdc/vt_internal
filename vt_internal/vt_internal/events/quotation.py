@@ -35,6 +35,9 @@ def after_insert(doc, method=None):
     """Juste après l'insertion en base."""
     pass
 
+_STATUT_ATTENTE_FOURNISSEUR = "En attente réponse fournisseur"
+
+
 def _update_status_fields(doc):
     """
     Met à jour les champs de statut interne et le montant attendu.
@@ -49,6 +52,10 @@ def _update_status_fields(doc):
             doc.status = "Lost"
             doc.custom_probabilite_de_conversion = 0
             # doc.docstatus = 1  # à ne mettre que dans before_save si besoin
+
+        if last_status.statut and last_status.statut != _STATUT_ATTENTE_FOURNISSEUR:
+            if not doc.custom_sent_date:
+                doc.custom_sent_date = frappe.utils.today()
     else:
         doc.custom_dernier_statut_de_suivi = None
         doc.custom_dernière_description_de_suivi = None
