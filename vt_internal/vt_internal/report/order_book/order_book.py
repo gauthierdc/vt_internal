@@ -125,7 +125,6 @@ def get_events_by_project(project_names):
 		"Event",
 		filters={
 			"project": ["in", project_names],
-			"starts_on": [">=", nowdate()],
 		},
 		fields=["name", "project", "starts_on", "ends_on", "color", "subject"],
 		order_by="starts_on",

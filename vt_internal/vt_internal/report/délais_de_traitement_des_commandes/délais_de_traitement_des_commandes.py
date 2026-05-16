@@ -59,7 +59,7 @@ def get_data(filters):
 			so.transaction_date AS date_commande,
 			p.total_sales_amount AS montant_commande,
 			q.creation AS date_devis,
-			sd.date_envoi_devis AS date_envoi_devis,
+			q.custom_sent_date AS date_envoi_devis,
 			MIN(wcr.le) AS date_reception,
 			MIN(CASE WHEN IFNULL(si.is_down_payment_invoice, 0) = 0 THEN si.posting_date END) AS date_facture,
 			MAX(pe.reference_date) AS date_paiement
@@ -77,13 +77,6 @@ def get_data(filters):
 				  AND q2.docstatus IN (0, 1)
 				  AND q2.transaction_date <= so.transaction_date
 			)
-		LEFT JOIN (
-			SELECT parent, MIN(creation) AS date_envoi_devis
-			FROM `tabSuivi Devis`
-			WHERE parenttype = 'Quotation'
-			  AND (statut IS NULL OR statut != 'En attente réponse fournisseur')
-			GROUP BY parent
-		) sd ON sd.parent = q.name
 		LEFT JOIN `tabWork Completion Receipt` wcr
 			ON wcr.project = p.name AND wcr.docstatus = 1
 		LEFT JOIN `tabSales Invoice` si
