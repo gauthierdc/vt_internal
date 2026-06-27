@@ -15,6 +15,8 @@ app_include_js = [
 	"/assets/vt_internal/js/bundle_editor_patch.js",
 	"/assets/vt_internal/js/logrocket.js",
 	"/assets/vt_internal/js/customer_quick_entry.js",
+	"/assets/vt_internal/js/vt_sidebar_default.js",
+	"/assets/vt_internal/js/vt_event_popup.js",
 ]
 
 # include js, css files in header of web template

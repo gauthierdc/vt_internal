@@ -46,9 +46,13 @@ Object.assign(frappe.listview_settings['Quotation'], {
 
     },
     onload: function (list_view) {
-        original_onload(list_view)
-        //list_view.page.fields_dict.quotation_to.set_value("Customer")
-
+        // Neutralise temporairement ListDashboard pendant l'appel à original_onload
+        // pour éviter que Frappe n'instancie un dashboard par défaut qui écraserait
+        // le dashboard personnalisé défini plus haut dans ce fichier.
+        const OrigDashboard = frappe.ui.ListDashboard;
+        frappe.ui.ListDashboard = function () {};
+        original_onload(list_view);
+        frappe.ui.ListDashboard = OrigDashboard;
 	},
 	refresh: function (list_view) {
 		//list_view.page.fields_dict.quotation_to.set_value("Customer")
