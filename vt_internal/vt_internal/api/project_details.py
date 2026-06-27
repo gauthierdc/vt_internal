@@ -37,8 +37,8 @@ def project_details():
     def get_purchase_orders(project_id):
         pos = frappe.db.get_list('Purchase Order',
             filters=[['docstatus', '!=', 2], ["Purchase Order Item", "project", "=", project_id]],
-            group_by="name",
-            fields=["name", "status", "transaction_date", "supplier", "sum(`tabPurchase Order Item`.amount) as total"]
+            fields=["name", "status", "transaction_date", "supplier", "grand_total as total"],
+            distinct=True,
         )
         total_purchase_order = sum(i.total for i in pos)
         items = [{
@@ -80,12 +80,13 @@ def project_details():
         } for i in ft]
 
     def get_timesheets(project_id):
-        tss = frappe.db.get_all('Timesheet',
-            filters=[['docstatus', '!=', 2], ["Timesheet Detail", "project", "=", project_id]],
-            group_by="project",
-            fields=["name", "sum(`tabTimesheet Detail`.costing_amount) as costing_amount", "sum(`tabTimesheet Detail`.hours) as hours"]
-        )
-        time_spent = round(sum(t.hours for t in tss), 2) or 0
+        result = frappe.db.sql("""
+            SELECT COALESCE(SUM(tsd.hours), 0) as hours
+            FROM `tabTimesheet Detail` tsd
+            JOIN `tabTimesheet` ts ON ts.name = tsd.parent
+            WHERE tsd.project = %s AND ts.docstatus != 2
+        """, project_id, as_dict=True)
+        time_spent = round(result[0].hours, 2) if result else 0
         return time_spent
 
     def get_fabrications(project_id):
@@ -108,8 +109,8 @@ def project_details():
         pis = frappe.db.get_list('Purchase Invoice',
             filters={'docstatus': ['!=', 2]},
             or_filters=[["Purchase Invoice Item", "project", "=", project_id], ["project", "=", project_id]],
-            group_by="name",
-            fields=["name", "status", "posting_date", "supplier", "sum(`tabPurchase Invoice Item`.amount) as total", 'custom_mode_of_paiement']
+            fields=["name", "status", "posting_date", "supplier", "grand_total as total", 'custom_mode_of_paiement'],
+            distinct=True,
         )
         return [{
             "doctype": "<span class='badge badge-danger'>Facture d'achat</span>",
