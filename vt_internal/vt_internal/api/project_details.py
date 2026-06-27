@@ -221,11 +221,14 @@ def project_details():
         return items, sos
 
     def get_sales_invoices_for_payments(project_id):
-        si = frappe.db.get_list('Sales Invoice',
-            filters=[['docstatus', '=', 1], ["project", "=", project_id]],
-            group_by="is_down_payment_invoice",
-            fields=["status", "sum(grand_total) as grand_total", "is_down_payment_invoice", "sum(outstanding_amount) as outstanding_amount"]
-        )
+        si = frappe.db.sql("""
+            SELECT status, is_down_payment_invoice,
+                SUM(grand_total) as grand_total,
+                SUM(outstanding_amount) as outstanding_amount
+            FROM `tabSales Invoice`
+            WHERE docstatus = 1 AND project = %s
+            GROUP BY is_down_payment_invoice
+        """, project_id, as_dict=True)
         return si
 
     def get_events(project_id):
