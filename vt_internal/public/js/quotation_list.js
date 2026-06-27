@@ -1,5 +1,4 @@
 const original_indicator = frappe.listview_settings['Quotation'].get_indicator
-const original_onload = frappe.listview_settings['Quotation'].onload
 
 Object.assign(frappe.listview_settings['Quotation'], {
     add_fields: ["custom_visite_technique_status", "custom_signature", "custom_dernier_statut_de_suivi", "custom_variant_number", "status"],
@@ -45,16 +44,4 @@ Object.assign(frappe.listview_settings['Quotation'], {
         return oi
 
     },
-    onload: function (list_view) {
-        // Neutralise temporairement ListDashboard pendant l'appel à original_onload
-        // pour éviter que Frappe n'instancie un dashboard par défaut qui écraserait
-        // le dashboard personnalisé défini plus haut dans ce fichier.
-        const OrigDashboard = frappe.ui.ListDashboard;
-        frappe.ui.ListDashboard = function () {};
-        original_onload(list_view);
-        frappe.ui.ListDashboard = OrigDashboard;
-	},
-	refresh: function (list_view) {
-		//list_view.page.fields_dict.quotation_to.set_value("Customer")
-	},
 })
