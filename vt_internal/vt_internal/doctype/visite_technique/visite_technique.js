@@ -364,7 +364,7 @@ frappe.ui.form.on('Visite Technique', {
     frm.set_query("contact", function(){
         if(frm.doc.client) {
             return {
-                query: "frappe.email.doctype.contact.contact.contact_query",
+                query: "frappe.contacts.doctype.contact.contact.contact_query",
                 filters: { link_doctype: "Customer", link_name: frm.doc.client }
             };
        }
