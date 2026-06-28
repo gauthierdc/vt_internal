@@ -1,7 +1,9 @@
 // Désactive le ListDashboard sur toutes les listes
-frappe.after_ajax(() => {
-	frappe.ui.ListDashboard = class {};
-});
+frappe.provide('frappe.ui');
+frappe.ui.ListDashboard = class {
+	constructor() {}
+	refresh() {}
+};
 
 // Force la barre latérale V&T sur toutes les pages
 frappe.after_ajax(() => {

@@ -6,6 +6,10 @@ app_email = "gauthier@de-chezelles.com"
 app_license = "mit"
 # required_apps = []
 
+fixtures = [
+	{"dt": "Desktop Icon", "filters": [["name", "in", ["V&T", "Insights"]]]}
+]
+
 # Includes in <head>
 # ------------------
 
