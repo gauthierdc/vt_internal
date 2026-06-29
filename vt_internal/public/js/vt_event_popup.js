@@ -65,9 +65,15 @@ async function vt_enhance_event_popup(popover_el) {
 		const body = popover_el.querySelector('.evp-scroller');
 		if (!body) return;
 
+		// Supprime toute section VT existante pour éviter les doublons
+		body.querySelector('.vt-popup-section')?.remove();
+
 		const section = document.createElement('div');
+		section.className = 'vt-popup-section';
 		section.style.cssText = 'border-top:1px solid var(--border-color);padding-top:10px;margin-top:4px;display:flex;flex-direction:column;gap:6px;';
-		section.addEventListener('click', (e) => e.stopPropagation());
+		// Stoppe mousedown uniquement : empêche le "clic en dehors" du calendrier
+		// sans perturber les événements touch sur mobile
+		section.addEventListener('mousedown', (e) => e.stopPropagation());
 
 		// Bouton Google Maps
 		if (address_display) {
@@ -96,7 +102,7 @@ async function vt_enhance_event_popup(popover_el) {
 			));
 		}
 
-		// Description issue de la FDT ou VT
+		// Description issue de la FDT ou VT (texte brut pour éviter XSS)
 		if (linked_description) {
 			const stripped = linked_description.replace(/<[^>]+>/g, '').trim();
 			if (stripped) {
@@ -111,7 +117,7 @@ async function vt_enhance_event_popup(popover_el) {
 					'max-height: 120px',
 					'overflow-y: auto',
 				].join(';');
-				desc_div.innerHTML = linked_description;
+				desc_div.textContent = stripped;
 				section.appendChild(desc_div);
 			}
 		}
