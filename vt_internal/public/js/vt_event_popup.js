@@ -5,6 +5,8 @@ frappe.after_ajax(() => {
 		for (const mutation of mutations) {
 			for (const node of mutation.addedNodes) {
 				if (node.nodeType !== 1 || !node.classList?.contains('evp-popover')) continue;
+				if (node.dataset.vtEnhanced) continue;
+				node.dataset.vtEnhanced = '1';
 				vt_enhance_event_popup(node);
 			}
 		}
@@ -58,11 +60,14 @@ async function vt_enhance_event_popup(popover_el) {
 			}
 		} catch (_) {}
 
+		if (!document.contains(popover_el)) return;
+
 		const body = popover_el.querySelector('.evp-scroller');
 		if (!body) return;
 
 		const section = document.createElement('div');
 		section.style.cssText = 'border-top:1px solid var(--border-color);padding-top:10px;margin-top:4px;display:flex;flex-direction:column;gap:6px;';
+		section.addEventListener('click', (e) => e.stopPropagation());
 
 		// Bouton Google Maps
 		if (address_display) {
