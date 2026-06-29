@@ -1,6 +1,13 @@
 // Enrichit le popup calendrier : liens FDT/VT, Google Maps, description
 
 frappe.after_ajax(() => {
+	// Sur mobile, supprime les tooltips hover du calendrier qui clignotent au toucher
+	if (window.matchMedia('(hover: none)').matches) {
+		document.addEventListener('mouseenter', (e) => {
+			if (e.target.closest('.fc-event')) e.stopImmediatePropagation();
+		}, true);
+	}
+
 	const observer = new MutationObserver((mutations) => {
 		for (const mutation of mutations) {
 			for (const node of mutation.addedNodes) {
