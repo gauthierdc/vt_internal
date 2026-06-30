@@ -37,7 +37,7 @@ def project_details():
     def get_purchase_orders(project_id):
         pos = frappe.db.get_list('Purchase Order',
             filters=[['docstatus', '!=', 2], ["Purchase Order Item", "project", "=", project_id]],
-            fields=["name", "status", "transaction_date", "supplier", "grand_total as total"],
+            fields=["name", "status", "transaction_date", "supplier", "net_total as total"],
             distinct=True,
         )
         total_purchase_order = sum(i.total for i in pos)
