@@ -40,7 +40,12 @@ def project_details():
             fields=["name", "status", "transaction_date", "supplier", "net_total as total"],
             distinct=True,
         )
-        total_purchase_order = sum(i.total for i in pos)
+        total_purchase_order = frappe.db.sql("""
+            SELECT COALESCE(SUM(poi.amount), 0) as total
+            FROM `tabPurchase Order Item` poi
+            INNER JOIN `tabPurchase Order` po ON po.name = poi.parent
+            WHERE poi.project = %s AND po.docstatus < 2
+        """, project_id)[0][0] or 0
         items = [{
             "doctype": "<span class='badge badge-secondary'>Commande fournisseur</span>",
             "doctype_label": "Commande fournisseur",
