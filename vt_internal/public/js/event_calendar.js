@@ -23,5 +23,10 @@ frappe.views.calendar["Event"] = {
 	get_events_method: "frappe.desk.doctype.event.event.get_events",
 	options: {
 		weekends: false,
+		// Utilise toute la hauteur disponible (le header "Statut" et le
+		// footer sont masqués via calendar.css) et étire les créneaux
+		// horaires pour supprimer le vide blanc en bas.
+		height: "calc(100svh - 130px)",
+		expandRows: true,
 	},
 };

@@ -1,0 +1,13 @@
+/* Vue Calendrier : récupérer de la hauteur en masquant les éléments inutiles */
+
+/* Barre "Statut : Publique / Privé" au-dessus du calendrier */
+.calendar-view-header {
+	display: none !important;
+}
+
+/* Pied de page "Sélectionnez ou faites glisser..." + bouton
+   "Masquer les week-ends" (le :has(.btn-weekend) le limite à la vue calendrier
+   pour ne pas masquer les footnotes des formulaires). */
+.footnote-area:has(.btn-weekend) {
+	display: none !important;
+}

@@ -82,6 +82,27 @@ async function vt_enhance_event_popup(popover_el) {
 		// sans perturber les événements touch sur mobile
 		section.addEventListener('mousedown', (e) => e.stopPropagation());
 
+		// Bouton : démarrer la feuille de temps en un clic
+		// FDT -> activité "Chantier" liée à la fiche ; VT -> activité "Visite technique"
+		const timer_args = has_fdt
+			? { action: 'start_construction', activity_type: 'Chantier', fiche_de_travail: doc.custom_fiche_de_travail }
+			: { action: 'start_construction', activity_type: 'Visite technique' };
+		const timer_label = has_fdt ? '▶️ Démarrer le chrono (chantier)' : '▶️ Démarrer le chrono (visite technique)';
+		section.appendChild(vt_make_popup_action_btn(timer_label, 'green', (btn) => {
+			btn.style.pointerEvents = 'none';
+			btn.style.opacity = '0.6';
+			frappe.call({ method: 'timesheet_post_api', args: timer_args })
+				.then(() => {
+					frappe.show_alert({ message: 'Tâche commencée', indicator: 'green' }, 5);
+					popover_el.remove();
+				})
+				.catch(() => {
+					btn.style.pointerEvents = '';
+					btn.style.opacity = '1';
+					frappe.show_alert({ message: 'Erreur au démarrage du chrono', indicator: 'red' }, 5);
+				});
+		}));
+
 		// Bouton Google Maps
 		if (address_display) {
 			const maps_url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address_display)}`;
@@ -133,6 +154,35 @@ async function vt_enhance_event_popup(popover_el) {
 	} catch (_) {
 		// Silencieux
 	}
+}
+
+function vt_make_popup_action_btn(html, color, onclick) {
+	const b = document.createElement('button');
+	b.type = 'button';
+	b.innerHTML = html;
+	b.style.cssText = `
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		padding: 7px 10px;
+		border-radius: var(--border-radius);
+		font-size: var(--text-sm);
+		font-weight: 600;
+		cursor: pointer;
+		background: var(--${color}-100, #dcfce7);
+		color: var(--${color}-700, #15803d);
+		border: 1px solid var(--${color}-300, #86efac);
+		transition: opacity 0.15s;
+	`;
+	b.addEventListener('mouseenter', () => b.style.opacity = '0.8');
+	b.addEventListener('mouseleave', () => b.style.opacity = '1');
+	b.addEventListener('click', (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		onclick(b);
+	});
+	return b;
 }
 
 function vt_make_popup_btn(html, href, color) {
