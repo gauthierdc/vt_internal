@@ -14,13 +14,16 @@ fixtures = [
 # ------------------
 
 # include js, css files in header of desk.html
-app_include_css = "/assets/vt_internal/css/calendar.css"
+# Noms de bundles nus (sans "/assets") : c'est la seule forme que
+# bundled_asset() résout via assets.json, ce qui donne un nom de fichier
+# haché à chaque build et invalide le cache navigateur (les assets sont
+# servis en "max-age=1an, immutable").
+app_include_css = "vt_calendar.bundle.css"
 app_include_js = [
-	"/assets/vt_internal/js/bundle_editor_patch.js",
-	"/assets/vt_internal/js/logrocket.js",
-	"/assets/vt_internal/js/customer_quick_entry.js",
-	"/assets/vt_internal/js/vt_sidebar_default.js",
-	"/assets/vt_internal/js/vt_event_popup.js",
+	"bundle_editor_patch.bundle.js",
+	"customer_quick_entry.bundle.js",
+	"vt_sidebar_default.bundle.js",
+	"vt_event_popup.bundle.js",
 ]
 
 # include js, css files in header of web template
