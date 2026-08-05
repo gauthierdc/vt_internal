@@ -94,7 +94,7 @@ async function vt_enhance_event_popup(popover_el) {
 			frappe.call({ method: 'timesheet_post_api', args: timer_args })
 				.then(() => {
 					frappe.show_alert({ message: 'Tâche commencée', indicator: 'green' }, 5);
-					popover_el.remove();
+					vt_close_event_popup(popover_el);
 				})
 				.catch(() => {
 					btn.style.pointerEvents = '';
@@ -114,20 +114,26 @@ async function vt_enhance_event_popup(popover_el) {
 
 		// Lien vers la Fiche de travail
 		if (has_fdt) {
-			section.appendChild(vt_make_popup_btn(
+			const fdt_btn = vt_make_popup_btn(
 				`🔧 Fiche : ${doc.custom_fiche_de_travail}`,
 				frappe.utils.get_form_link('Fiche de travail', doc.custom_fiche_de_travail),
 				'green'
-			));
+			);
+			// La section stoppe mousedown, donc le popover ne se ferme pas
+			// tout seul via le "clic en dehors" : on le ferme explicitement.
+			fdt_btn.addEventListener('click', () => vt_close_event_popup(popover_el));
+			section.appendChild(fdt_btn);
 		}
 
 		// Lien vers la Visite Technique
 		if (has_vt) {
-			section.appendChild(vt_make_popup_btn(
+			const vt_btn = vt_make_popup_btn(
 				`🔍 Visite : ${doc.custom_visite_technique}`,
 				frappe.utils.get_form_link('Visite Technique', doc.custom_visite_technique),
 				'orange'
-			));
+			);
+			vt_btn.addEventListener('click', () => vt_close_event_popup(popover_el));
+			section.appendChild(vt_btn);
 		}
 
 		// Description issue de la FDT ou VT (texte brut pour éviter XSS)
@@ -153,6 +159,20 @@ async function vt_enhance_event_popup(popover_el) {
 		body.appendChild(section);
 	} catch (_) {
 		// Silencieux
+	}
+}
+
+// Ferme proprement le popover calendrier.
+// On clique le backdrop plutôt que de faire popover_el.remove() : son handler
+// natif (EventPopupManager.hideEventPopup) retire À LA FOIS le popover ET le
+// backdrop plein écran (.evp-backdrop, position:fixed inset:0) et réinitialise
+// l'état interne. Sans ça, le backdrop reste et bloque le scroll de la page.
+function vt_close_event_popup(popover_el) {
+	const backdrop = document.querySelector('.evp-backdrop');
+	if (backdrop) {
+		backdrop.click();
+	} else {
+		popover_el?.remove();
 	}
 }
 
