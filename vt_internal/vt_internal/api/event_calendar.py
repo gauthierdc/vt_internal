@@ -44,15 +44,20 @@ def get_event_detail(name):
 	vt = doc.get("custom_visite_technique")
 	fdt = doc.get("custom_fiche_de_travail")
 
-	# Adresse : depuis le doc de référence (FDT prioritaire, comme le popup existant,
-	# qui ne lisait que `address`/`description`). Téléphone : uniquement depuis la VT
-	# (le champ n'existe pas forcément sur Fiche de travail).
+	# Adresse + description LIÉE : depuis le doc de référence (FDT prioritaire, comme
+	# le custom_html de l'Event). Téléphone : uniquement depuis la VT (le champ
+	# n'existe pas forcément sur Fiche de travail).
 	address_display = None
 	phone = None
+	linked_description = None
 	if fdt and frappe.db.exists("Fiche de travail", fdt):
-		address_display = _compose_address(frappe.db.get_value("Fiche de travail", fdt, "address"))
+		r = frappe.db.get_value("Fiche de travail", fdt, ["address", "description"], as_dict=True) or {}
+		address_display = _compose_address(r.get("address"))
+		linked_description = r.get("description")
 	elif vt and frappe.db.exists("Visite Technique", vt):
-		address_display = _compose_address(frappe.db.get_value("Visite Technique", vt, "address"))
+		r = frappe.db.get_value("Visite Technique", vt, ["address", "description"], as_dict=True) or {}
+		address_display = _compose_address(r.get("address"))
+		linked_description = r.get("description")
 
 	if vt and frappe.db.exists("Visite Technique", vt):
 		phone = frappe.db.get_value("Visite Technique", vt, "phone")
@@ -65,7 +70,8 @@ def get_event_detail(name):
 		"all_day": bool(doc.all_day),
 		"event_type": doc.event_type,
 		"color": _color(doc.color, doc.event_type),
-		"description": (doc.description or "").strip(),
+		"event_description": doc.description or "",
+		"linked_description": linked_description or "",
 		"vt": vt,
 		"fdt": fdt,
 		"address_display": address_display,

@@ -75,16 +75,15 @@ frappe.after_ajax(() => {
 	// Capture-phase pour passer avant le listener natif du popover.
 	document.addEventListener("click", onCalendarClick, true);
 
-	// Sur mobile, supprime les tooltips hover du calendrier qui clignotent au toucher.
-	if (window.matchMedia("(hover: none)").matches) {
-		document.addEventListener(
-			"mouseenter",
-			(e) => {
-				if (e.target.closest && e.target.closest(".fc-event")) e.stopImmediatePropagation();
-			},
-			true
-		);
-	}
+	// Désactive la tooltip "hover" native du calendrier (redondante avec le drawer,
+	// et clignotante au toucher sur mobile). jQuery implémente `mouseenter` via un
+	// `mouseover` natif, donc on capture les deux sur un .fc-event et on stoppe la
+	// propagation avant que le déclencheur Bootstrap ne s'exécute.
+	const killTooltip = (e) => {
+		if (e.target.closest && e.target.closest(".fc-event")) e.stopImmediatePropagation();
+	};
+	document.addEventListener("mouseenter", killTooltip, true);
+	document.addEventListener("mouseover", killTooltip, true);
 });
 
 // Expose pour usage éventuel ailleurs.

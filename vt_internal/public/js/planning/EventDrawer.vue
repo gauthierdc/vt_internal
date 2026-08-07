@@ -23,7 +23,14 @@
 						<span class="vtc-tag">{{ detail.event_type }}</span>
 					</div>
 
-					<p v-if="descText" class="vtc-desc">{{ descText }}</p>
+					<div v-if="eventDescHtml" class="vtc-block">
+						<div class="vtc-block-label">{{ __("Note de l'événement") }}</div>
+						<div class="vtc-desc" v-html="eventDescHtml"></div>
+					</div>
+					<div v-if="linkedDescHtml" class="vtc-block">
+						<div class="vtc-block-label">{{ __("Description") }} · {{ linkedLabel }}</div>
+						<div class="vtc-desc linked" v-html="linkedDescHtml"></div>
+					</div>
 
 					<button
 						v-if="(detail.vt || detail.fdt) && showStart"
@@ -126,10 +133,18 @@ const whenText = computed(() => {
 	if (e) out += sameDay(s, e) ? ` – ${timeF.format(e)}` : ` → ${cap(dateF.format(e))} ${timeF.format(e)}`;
 	return out;
 });
-const descText = computed(() => {
-	const d = detail.value;
-	if (!d || !d.description) return "";
-	return d.description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+// Descriptions en HTML (rich text), rendues telles quelles comme dans le
+// formulaire Event. Renvoie "" si le contenu est vide (ex: "<div><br></div>").
+const cleanHtml = (html) => {
+	if (!html) return "";
+	const plain = html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+	return plain ? html : "";
+};
+const eventDescHtml = computed(() => cleanHtml(detail.value && detail.value.event_description));
+const linkedDescHtml = computed(() => cleanHtml(detail.value && detail.value.linked_description));
+const linkedLabel = computed(() => {
+	const d = detail.value || {};
+	return d.fdt ? __("Fiche de travail") : d.vt ? __("Visite technique") : __("Lié");
 });
 
 // Ouverture pilotée par le store (store.eventId + store.nonce)
@@ -249,7 +264,15 @@ function dayAction(kind) {
 .vtc-when { margin: 0; font-size: 14px; color: var(--text-muted, #6c7680); text-transform: capitalize; }
 .vtc-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .vtc-tag { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--control-bg, #eef1f3); color: var(--text-muted, #6c7680); }
-.vtc-desc { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text-color, #1f272e); background: var(--control-bg, #f6f7f8); border-radius: 10px; padding: 10px 12px; max-height: 140px; overflow-y: auto; }
+.vtc-block { display: flex; flex-direction: column; gap: 5px; }
+.vtc-block-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted, #6c7680); font-weight: 600; }
+.vtc-desc { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text-color, #1f272e); background: var(--control-bg, #f6f7f8); border-radius: 10px; padding: 10px 12px; max-height: 180px; overflow-y: auto; }
+.vtc-desc.linked { background: color-mix(in srgb, #1e88e5 7%, var(--control-bg, #f6f7f8)); border-left: 3px solid #1e88e5; border-radius: 4px 10px 10px 4px; }
+.vtc-desc :deep(p) { margin: 0 0 6px; }
+.vtc-desc :deep(p:last-child) { margin-bottom: 0; }
+.vtc-desc :deep(img) { max-width: 100%; height: auto; border-radius: 6px; }
+.vtc-desc :deep(ul), .vtc-desc :deep(ol) { margin: 4px 0; padding-left: 18px; }
+.vtc-desc :deep(a) { color: #1e88e5; }
 .vtc-action {
 	display: flex; align-items: center; gap: 10px; width: 100%;
 	padding: 12px 14px; border-radius: 11px; font-size: 14px; font-weight: 560;
