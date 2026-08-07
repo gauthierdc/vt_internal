@@ -5,6 +5,35 @@ frappe.ui.ListDashboard = class {
 	refresh() {}
 };
 
+// FIX sidebar : certains libellés de rapport contiennent un "%" (ex :
+// "P&L — Marges brute & nette (%)"), dont le href /desk/query-report/...(%)
+// fait lever URIError "URI malformed" à decodeURIComponent() dans
+// Sidebar.is_route_in_sidebar(). Cette exception casse la construction des
+// Pages custom (zone principale blanche). On protège la méthode : en cas
+// d'erreur on renvoie false (pas de surbrillance) au lieu de tout casser.
+(function guardSidebarRouteDecode() {
+	const patch = () => {
+		const proto = frappe.ui && frappe.ui.Sidebar && frappe.ui.Sidebar.prototype;
+		if (!proto || proto.__vt_route_guard) return false;
+		const orig = proto.is_route_in_sidebar;
+		if (typeof orig !== 'function') return false;
+		proto.is_route_in_sidebar = function () {
+			try {
+				return orig.apply(this, arguments);
+			} catch (e) {
+				console.warn('[VT] is_route_in_sidebar protégé (href mal formé) :', e.message);
+				return false;
+			}
+		};
+		proto.__vt_route_guard = true;
+		return true;
+	};
+	if (!patch()) {
+		const t = setInterval(() => { if (patch()) clearInterval(t); }, 100);
+		setTimeout(() => clearInterval(t), 10000);
+	}
+})();
+
 // Force la barre latérale V&T sur toutes les pages
 frappe.after_ajax(() => {
 	const wait = setInterval(() => {
