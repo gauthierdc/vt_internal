@@ -5,3 +5,4 @@
 # Patches added in this section will be executed after doctypes are migrated
 vt_internal.vt_internal.patches.create_default_prompt_ia
 vt_internal.vt_internal.patches.drop_migrated_scripts
+vt_internal.vt_internal.patches.promote_custom_doctypes

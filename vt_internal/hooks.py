@@ -41,9 +41,9 @@ app_include_js = [
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# DocTypes STANDARD uniquement (custom=0). Les DocTypes custom sont chargés via
-# le bundle app_include_js "vt_custom_doctypes.bundle.js" (voir plus haut) car
-# Frappe ignore ces hooks pour les doctypes custom.
+# DocTypes STANDARD (custom=0) : leur JS de formulaire/liste est ici (hooks) ou,
+# pour les doctypes promus (Fiche de travail, etc.), dans doctype/<nom>/<nom>.js
+# chargé nativement par Frappe une fois custom=0 (cf. patch promote_custom_doctypes).
 doctype_js = {
 	"Quotation": "public/js/quotation.js",
 	"Bank Transaction": "public/js/bank_transaction.js",
