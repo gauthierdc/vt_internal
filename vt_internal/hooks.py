@@ -24,6 +24,9 @@ app_include_js = [
 	"customer_quick_entry.bundle.js",
 	"vt_sidebar_default.bundle.js",
 	"vt_event_popup.bundle.js",
+	# JS client des DocTypes custom (custom=1) : les hooks doctype_js/list_js
+	# sont ignorés par Frappe pour ces doctypes -> on les charge globalement.
+	"vt_custom_doctypes.bundle.js",
 ]
 
 # include js, css files in header of web template
@@ -41,50 +44,39 @@ app_include_js = [
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
+# DocTypes STANDARD uniquement (custom=0). Les DocTypes custom sont chargés via
+# le bundle app_include_js "vt_custom_doctypes.bundle.js" (voir plus haut) car
+# Frappe ignore ces hooks pour les doctypes custom.
 doctype_js = {
 	"Quotation": "public/js/quotation.js",
-	"BMV settings": "public/js/bmv_settings.js",
 	"Bank Transaction": "public/js/bank_transaction.js",
-	"Carte de travail VT": "public/js/carte_de_travail_vt.js",
-	"Consolidated invoice": "public/js/consolidated_invoice.js",
 	"Customer": "public/js/customer.js",
 	"Delivery Note": "public/js/delivery_note.js",
 	"Event": "public/js/event.js",
 	"Expense": "public/js/expense.js",
-	"Fabrication VT": "public/js/fabrication_vt.js",
-	"Fiche de travail": "public/js/fiche_de_travail.js",
 	"OCR Request": "public/js/ocr_request.js",
-	"Order Satisfaction": "public/js/order_satisfaction.js",
 	"Payment Entry": "public/js/payment_entry.js",
 	"Payment Order": "public/js/payment_order.js",
-	"Pending Purchase Invoice": "public/js/pending_purchase_invoice.js",
-	"Production statement": "public/js/production_statement.js",
 	"Project": "public/js/project.js",
 	"Purchase Invoice": "public/js/purchase_invoice.js",
 	"Purchase Order": "public/js/purchase_order.js",
 	"Purchase Receipt": "public/js/purchase_receipt.js",
-	"Quality Incident": "public/js/quality_incident.js",
 	"Sales Invoice": "public/js/sales_invoice.js",
 	"Sales Order": "public/js/sales_order.js",
 	"Supplier Invoice": "public/js/supplier_invoice.js",
 	"Supplier Quotation": "public/js/supplier_quotation.js",
 	"Timesheet": "public/js/timesheet.js",
 	"VT Formulaire Verre Production": "public/js/vt_formulaire_verre_production.js",
-	"VT Objective": "public/js/vt_objective.js",
 	"VT Prix De Forme": "public/js/vt_prix_de_forme.js",
-	"Work Completion Receipt": "public/js/work_completion_receipt.js",
 }
 doctype_list_js = {
 	"Quotation": "public/js/quotation_list.js",
 	"Customer": "public/js/customer_list.js",
 	"Delivery Note": "public/js/delivery_note_list.js",
-	"Fiche de travail": "public/js/fiche_de_travail_list.js",
 	"Issue": "public/js/issue_list.js",
 	"OCR Request": "public/js/ocr_request_list.js",
-	"Pending Purchase Invoice": "public/js/pending_purchase_invoice_list.js",
 	"Purchase Order": "public/js/purchase_order_list.js",
 	"Purchase Receipt": "public/js/purchase_receipt_list.js",
-	"Quotation Approval": "public/js/quotation_approval_list.js",
 	"Sales Invoice": "public/js/sales_invoice_list.js",
 	"Sales Order": "public/js/sales_order_list.js",
 	"Timesheet": "public/js/timesheet_list.js",
