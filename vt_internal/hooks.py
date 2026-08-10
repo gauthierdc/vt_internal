@@ -24,9 +24,6 @@ app_include_js = [
 	"customer_quick_entry.bundle.js",
 	"vt_sidebar_default.bundle.js",
 	"vt_event_popup.bundle.js",
-	# JS client des DocTypes custom (custom=1) : les hooks doctype_js/list_js
-	# sont ignorés par Frappe pour ces doctypes -> on les charge globalement.
-	"vt_custom_doctypes.bundle.js",
 ]
 
 # include js, css files in header of web template
