@@ -180,7 +180,7 @@ def on_trash(doc, method=None):
         print("Error")
 
 
-def before_print(doc, method=None, **kwargs):
+def before_print(doc, method=None, print_settings=None, **kwargs):
     # --- depuis Server Script « Commande client impression » (Before Print) ---
 
 

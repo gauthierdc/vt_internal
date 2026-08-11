@@ -137,6 +137,6 @@ def on_trash(doc, method=None):
         frappe.db.set_value("Sales Order", doc.sales_order, "custom_statut_fiche_de_travail", "")
 
 
-def before_print(doc, method=None, **kwargs):
+def before_print(doc, method=None, print_settings=None, **kwargs):
     # --- depuis Server Script « Impression fiche de travail » (Before Print) ---
     sales_order = frappe.get_doc("Sales Order", doc.sales_order)

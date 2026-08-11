@@ -100,7 +100,7 @@ def before_update_after_submit(doc, method=None):
         doc.custom_déposé_sur_chorus = 0
 
 
-def before_print(doc, method=None, **kwargs):
+def before_print(doc, method=None, print_settings=None, **kwargs):
     # --- depuis Server Script « Avant l'impression » (Before Print) ---
     sales_orders = list(dict.fromkeys([item.sales_order for item in doc.items if item.sales_order]))
     doc.is_consolidated = len(sales_orders) > 1

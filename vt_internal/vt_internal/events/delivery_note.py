@@ -45,7 +45,7 @@ def on_submit(doc, method=None):
                 d.save()
 
 
-def before_print(doc, method=None, **kwargs):
+def before_print(doc, method=None, print_settings=None, **kwargs):
     # Le Server Script d'origine était entièrement commenté (aucun effet en prod) :
     #   sales_orders = list(dict.fromkeys(
     #       [item.against_sales_order for item in doc.items if item.against_sales_order]))
