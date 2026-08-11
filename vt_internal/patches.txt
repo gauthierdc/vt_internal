@@ -7,3 +7,4 @@ vt_internal.vt_internal.patches.nullfix_before_doctype_promote
 vt_internal.vt_internal.patches.create_default_prompt_ia
 vt_internal.vt_internal.patches.drop_migrated_scripts
 vt_internal.vt_internal.patches.promote_custom_doctypes
+vt_internal.vt_internal.patches.drop_deprecated_doctypes
