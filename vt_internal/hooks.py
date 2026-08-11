@@ -370,14 +370,13 @@ override_whitelisted_methods = {
 	"frappe.desk.doctype.event.event.get_events": "vt_internal.vt_internal.overrides.event.get_events",
 	# --- Préservation des URLs courtes des anciens Server Scripts API ---
 	# Les clés reproduisent l'ancien api_method (/api/method/<clé>) pour ne casser
-	# ni les appels front (URL courte) ni les webhooks externes (Jotform, etc.).
+	# les appels front (URL courte).
 	# La clé peut contenir un tiret : le handler résout par simple lookup de dict.
 	"change_company": "vt_internal.vt_internal.api.admin.change_company",
 	"change_cost_center": "vt_internal.vt_internal.api.admin.change_cost_center",
 	"create_production": "vt_internal.vt_internal.api.fabrication.create_production",
 	"ft_timer_html": "vt_internal.vt_internal.api.timesheet.ft_timer_html",
 	"generate_consolidate_sales_invoice": "vt_internal.vt_internal.api.sales.generate_consolidate_sales_invoice",
-	"jotform-create-client": "vt_internal.vt_internal.api.jotform.jotform_create_client",
 	"new_fabrication": "vt_internal.vt_internal.api.fabrication.new_fabrication",
 	"new_visite_technique_from_quotation": "vt_internal.vt_internal.api.sales.new_visite_technique_from_quotation",
 	"payment_link_from_sales_order": "vt_internal.vt_internal.api.sales.payment_link_from_sales_order",
@@ -389,8 +388,6 @@ override_whitelisted_methods = {
 	"update_bmv_prices": "vt_internal.vt_internal.api.admin.update_bmv_prices",
 	"update_fiche_de_travail_status": "vt_internal.vt_internal.api.timesheet.update_fiche_de_travail_status",
 	"update_manufacturing_status": "vt_internal.vt_internal.api.fabrication.update_manufacturing_status",
-	"vision-do": "vt_internal.vt_internal.api.jotform.vision_do",
-	"vo-jotform": "vt_internal.vt_internal.api.jotform.vo_jotform",
 }
 #
 # each overriding function accepts a `data` argument;
