@@ -1,0 +1,350 @@
+/* Styles des formulaires vt_internal (remplace les styles inline JS). */
+
+/* ---- Couleurs de sections (fiche de travail / visite technique) ---- */
+.vt-section--info .section-head,
+.vt-section--info { background-color: antiquewhite; }
+.vt-section--work .section-head,
+.vt-section--work { background-color: cadetblue; }
+
+/* ---- Galerie photos (vt.photos) ---- */
+.vt-photos__section { margin-bottom: 20px; }
+.vt-photos__title { margin-bottom: 10px; color: var(--text-color, #333); font-weight: 600; }
+.vt-photos__actions { display: flex; gap: 10px; margin-bottom: 10px; }
+.vt-photos__actions .btn { flex: 1; padding: 10px; border-radius: 6px; }
+
+.vt-photos__grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	gap: 10px;
+}
+.vt-photos__item {
+	position: relative;
+	border-radius: 8px;
+	overflow: hidden;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.vt-photos__img {
+	width: 100%;
+	height: 200px;
+	object-fit: cover;
+	cursor: pointer;
+	transition: transform 0.2s;
+}
+.vt-photos__img:hover { transform: scale(1.05); }
+.vt-photos__delete {
+	position: absolute;
+	top: 5px;
+	right: 5px;
+	border-radius: 50%;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 0.9;
+}
+.vt-photos__empty,
+.vt-photos__placeholder {
+	padding: 20px;
+	text-align: center;
+	background: var(--fg-color, #fafafa);
+	border-radius: 8px;
+	border: 2px dashed var(--border-color, #ddd);
+}
+.vt-photos__empty i { font-size: 32px; color: #ccc; margin-bottom: 8px; }
+
+/* ---- Bouton "Ouvrir dans Google Maps" ---- */
+.vt-btn-map {
+	background-color: #1e88e5 !important;
+	color: #fff !important;
+	width: 100%;
+	font-size: 16px;
+	padding: 12px 14px;
+	border-radius: 8px;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	white-space: normal;
+	text-align: center;
+}
+@media (max-width: 480px) {
+	.vt-btn-map { font-size: 18px; padding: 14px 16px; }
+}
+
+/* ---- Widget de pointage global (vt.timer.widget) ---- */
+.vt-timer-widget {
+	position: fixed;
+	bottom: 16px;
+	right: 16px;
+	z-index: 1030;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 8px;
+	font-size: 13px;
+}
+
+/* Bouton principal (pastille) */
+.vt-timer-widget__toggle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 14px;
+	background: var(--card-bg, #fff);
+	border: 1px solid var(--border-color, #e0e0e0);
+	border-radius: 999px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+	cursor: pointer;
+}
+.vt-timer-widget__dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	flex: 0 0 auto;
+}
+.vt-timer-widget__dot--active { background: #2ecc71; box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.18); }
+.vt-timer-widget__dot--pause { background: #f39c12; }
+.vt-timer-widget__dot--idle { background: #bbb; }
+.vt-timer-widget__dot--done { background: #3498db; }
+.vt-timer-widget__dot--lg { width: 14px; height: 14px; }
+.vt-timer-widget__label { font-weight: 600; white-space: nowrap; max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+.vt-timer-widget__chrono { color: var(--text-muted, #888); font-variant-numeric: tabular-nums; }
+.vt-timer-widget__caret { color: var(--text-muted, #888); margin-left: 2px; display: inline-flex; align-items: center; }
+.vt-timer-widget__caret .icon { width: 14px; height: 14px; }
+/* Barre du bas : bouton calendrier + pastille */
+.vt-timer-widget__bar { display: flex; align-items: center; gap: 8px; }
+.vt-timer-widget__bar .vt-timer-widget__toggle { flex: 1; }
+.vt-timer-widget__calbtn {
+	flex: 0 0 auto;
+	width: 44px;
+	height: 44px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--card-bg, #fff);
+	border: 1px solid var(--border-color, #e0e0e0);
+	border-radius: 50%;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+	color: var(--text-color, #444);
+	cursor: pointer;
+	transition: transform 0.05s ease, color 0.1s ease, background 0.1s ease;
+}
+.vt-timer-widget__calbtn:hover { color: #1e88e5; background: rgba(30, 136, 229, 0.08); }
+.vt-timer-widget__calbtn:active { transform: scale(0.94); }
+.vt-timer-widget__calbtn .icon { width: 20px; height: 20px; }
+
+/* Panneau déroulant (au-dessus du bouton) */
+.vt-timer-widget__panel {
+	display: flex;
+	flex-direction: column;
+	width: 300px;
+	max-width: 92vw;
+	background: var(--card-bg, #fff);
+	border: 1px solid var(--border-color, #e0e0e0);
+	border-radius: 14px;
+	box-shadow: 0 10px 32px rgba(0, 0, 0, 0.24);
+	overflow: hidden;
+}
+.vt-timer-widget__panel[hidden] { display: none; }
+
+/* En-tête « Ma journée » */
+.vt-timer-widget__head {
+	padding: 13px 14px 12px;
+	color: #fff;
+	background: linear-gradient(135deg, #1e88e5, #1565c0);
+}
+.vt-timer-widget__head-top {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+.vt-timer-widget__head-title { font-weight: 700; font-size: 15px; letter-spacing: 0.01em; }
+.vt-timer-widget__head-date { font-size: 12px; opacity: 0.85; text-transform: capitalize; }
+.vt-timer-widget__stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.vt-timer-widget__stat {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 11.5px;
+	font-weight: 600;
+	padding: 3px 8px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.18);
+}
+.vt-timer-widget__stat .icon { width: 13px; height: 13px; }
+.vt-timer-widget__stat--btn {
+	border: none;
+	color: #fff;
+	font-family: inherit;
+	cursor: pointer;
+	transition: background 0.1s ease;
+}
+.vt-timer-widget__stat--btn:hover { background: rgba(255, 255, 255, 0.34); }
+
+/* Carte de statut (activité en cours) */
+.vt-timer-widget__status {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px 14px;
+	background: var(--control-bg, #f6f8fb);
+	border-bottom: 1px solid var(--border-color, #ececec);
+}
+.vt-timer-widget__status .vt-timer-widget__dot { margin-top: 1px; }
+.vt-timer-widget__status-body { min-width: 0; }
+.vt-timer-widget__status-title {
+	font-weight: 700;
+	font-size: 14px;
+	line-height: 1.2;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.vt-timer-widget__status-sub {
+	margin-top: 2px;
+	font-size: 12px;
+	color: var(--text-muted, #888);
+	display: flex;
+	gap: 6px;
+	align-items: baseline;
+}
+.vt-timer-widget__status-sub .vt-timer-widget__chrono { font-weight: 600; color: var(--text-color, #444); }
+
+/* Corps du panneau (actions) */
+.vt-timer-widget__actions {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px;
+}
+.vt-timer-widget__quick { display: flex; gap: 6px; }
+.vt-timer-widget__quick .vt-timer-widget__item { flex: 1; justify-content: center; }
+.vt-timer-widget__footer { display: flex; gap: 6px; margin-top: 2px; }
+.vt-timer-widget__footer .vt-timer-widget__item { flex: 1; justify-content: center; }
+.vt-timer-widget__section-title {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-muted, #999);
+	padding: 6px 2px 2px;
+}
+
+/* Rangée fiche du jour : bouton de pointage + bouton d'ouverture. */
+.vt-timer-widget__row { display: flex; gap: 6px; align-items: stretch; }
+.vt-timer-widget__row > .vt-timer-widget__item--today { flex: 1; min-width: 0; }
+.vt-timer-widget__row > .vt-timer-widget__item--iconbtn {
+	flex: 0 0 44px;
+	width: 44px;
+	min-width: 44px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	background: #e8f7ef;
+	border-color: #9fe0bd;
+	color: #0f7a45;
+}
+.vt-timer-widget__row > .vt-timer-widget__item--iconbtn .icon { width: 18px; height: 18px; }
+.vt-timer-widget__row > .vt-timer-widget__item--iconbtn.is-active {
+	background: #0f9d58;
+	border-color: #0f9d58;
+	color: #fff;
+}
+.vt-timer-widget__row > .vt-timer-widget__item--mapsbtn {
+	flex: 0 0 44px;
+	width: 44px;
+	min-width: 44px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	background: #e8f0fe;
+	border-color: #a9c7fb;
+	color: #1a56db;
+}
+.vt-timer-widget__row > .vt-timer-widget__item--mapsbtn .icon { width: 18px; height: 18px; }
+
+/* La fiche (libellé) est cliquable pour ouvrir : curseur explicite. */
+.vt-timer-widget__item--today { cursor: pointer; }
+
+.vt-timer-widget__item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	text-align: left;
+	white-space: normal;
+	padding: 9px 12px;
+	border-radius: 8px;
+	line-height: 1.3;
+	color: var(--text-color, #1f272e);
+	background: var(--card-bg, #fff);
+	border: 1px solid var(--border-color, #e0e0e0);
+	transition: transform 0.05s ease, filter 0.1s ease;
+}
+.vt-timer-widget__item:hover { filter: brightness(0.97); }
+.vt-timer-widget__item:active { transform: scale(0.97); }
+.vt-timer-widget__ic { flex: 0 0 auto; display: inline-flex; align-items: center; opacity: 0.85; }
+.vt-timer-widget__ic .icon { width: 16px; height: 16px; }
+.vt-timer-widget__txt {
+	min-width: 0;
+	flex: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* Les boutons centrés (accès rapides / pied) ne doivent pas s'étirer sur toute la ligne. */
+.vt-timer-widget__quick .vt-timer-widget__txt,
+.vt-timer-widget__footer .vt-timer-widget__txt { flex: 0 1 auto; }
+.vt-timer-widget__item--open {
+	background: var(--fg-color, #f5f7fa);
+	border-color: var(--border-color, #d0d7de);
+	font-weight: 600;
+	font-size: 12px;
+}
+.vt-timer-widget__item--primary {
+	background: #1e88e5;
+	border-color: #1e88e5;
+	color: #fff;
+	font-weight: 600;
+}
+.vt-timer-widget__item--primary:hover,
+.vt-timer-widget__item--primary:focus { background: #1669b8; color: #fff; }
+.vt-timer-widget__item--today {
+	background: var(--fg-color, #f5f7fa);
+	border-color: var(--border-color, #d0d7de);
+	font-weight: 600;
+	font-size: 12px;
+}
+.vt-timer-widget__item--today.is-active {
+	background: #e8f7ef;
+	border-color: #9fe0bd;
+	color: #0f7a45;
+}
+.vt-timer-widget__item--break {
+	background: #fff5e6;
+	border-color: #f0c987;
+	color: #a4620a;
+	font-weight: 600;
+}
+.vt-timer-widget__item--danger {
+	background: #fdecea;
+	border-color: #f1b0ab;
+	color: #b3261e;
+	font-weight: 600;
+}
+.vt-timer-widget__empty { padding: 8px 4px; font-size: 12px; }
+
+@media (max-width: 480px) {
+	.vt-timer-widget {
+		left: 8px;
+		right: 8px;
+		bottom: 8px;
+	}
+	.vt-timer-widget__panel { width: auto; }
+}

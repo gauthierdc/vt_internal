@@ -18,12 +18,17 @@ fixtures = [
 # bundled_asset() résout via assets.json, ce qui donne un nom de fichier
 # haché à chaque build et invalide le cache navigateur (les assets sont
 # servis en "max-age=1an, immutable").
-app_include_css = "vt_calendar.bundle.css"
+app_include_css = [
+	"vt_calendar.bundle.css",
+	"vt_forms.bundle.css",
+]
 app_include_js = [
 	"bundle_editor_patch.bundle.js",
 	"customer_quick_entry.bundle.js",
 	"vt_sidebar_default.bundle.js",
 	"vt_event_popup.bundle.js",
+	# Helpers partagés (vt.timer, vt.photos) + widget de pointage global.
+	"vt_common.bundle.js",
 ]
 
 # include js, css files in header of web template
@@ -384,6 +389,7 @@ override_whitelisted_methods = {
 	"sales_order_to_chantier_a_faire": "vt_internal.vt_internal.api.sales.sales_order_to_chantier_a_faire",
 	"sms_delivery_note": "vt_internal.vt_internal.api.delivery_note.sms_delivery_note",
 	"timesheet_html_block": "vt_internal.vt_internal.api.timesheet.timesheet_html_block",
+	"timesheet_state": "vt_internal.vt_internal.api.timesheet.timesheet_state",
 	"timesheet_post_api": "vt_internal.vt_internal.api.timesheet.timesheet_post_api",
 	"update_bmv_prices": "vt_internal.vt_internal.api.admin.update_bmv_prices",
 	"update_fiche_de_travail_status": "vt_internal.vt_internal.api.timesheet.update_fiche_de_travail_status",

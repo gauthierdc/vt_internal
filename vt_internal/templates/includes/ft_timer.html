@@ -1,0 +1,23 @@
+{# Récap d'activité par employé pour une Fiche de travail (cf. api.timesheet.ft_timer_html) #}
+<h6>Récapitulatif d'activité</h6>
+<small class="text-primary">Nombre total d'heures : {{ total_hours }}</small>
+<table class="table">
+	<thead>
+		<tr class="table-primary">
+			<th scope="col">Employé</th>
+			<th scope="col">Heures</th>
+		</tr>
+	</thead>
+	<tbody>
+		{% for row in rows %}
+		<tr class="table-light">
+			<td>
+				<a href="/app/timesheet?employee={{ row.employee | urlencode }}&custom_fiche_de_travail={{ ft_id | urlencode }}">
+					{{ row.employee }}
+				</a>
+			</td>
+			<td>{{ row.hours }}</td>
+		</tr>
+		{% endfor %}
+	</tbody>
+</table>
