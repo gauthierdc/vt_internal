@@ -357,6 +357,11 @@ scheduler_events = {
 			"0 19 * * 5": [
 					"vt_internal.vt_internal.weekly_hours_report.send_by_mail_weekly_hours_report"
 			],
+			# Tous les soirs à 18h : rappel (SMS ou e-mail) des interventions du lendemain
+			"0 18 * * *": [
+					"vt_internal.vt_internal.tasks.rappel_intervention.rappel_chantier",
+					"vt_internal.vt_internal.tasks.rappel_intervention.rappel_visite_technique",
+			],
 	},
 }
 
