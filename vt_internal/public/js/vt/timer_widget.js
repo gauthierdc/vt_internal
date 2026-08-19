@@ -142,7 +142,12 @@ vt.timer.widget = {
             <div class="vt-timer-widget__head">
                 <div class="vt-timer-widget__head-top">
                     <span class="vt-timer-widget__head-title">Ma journée</span>
-                    <span class="vt-timer-widget__head-date">${esc(vt.timer.widget._french_date())}</span>
+                    <div class="vt-timer-widget__head-right">
+                        <span class="vt-timer-widget__head-date">${esc(vt.timer.widget._french_date())}</span>
+                        <button class="vt-timer-widget__calbtn" title="Ouvrir le calendrier" aria-label="Calendrier">${ic(
+                            "calendar"
+                        )}</button>
+                    </div>
                 </div>
                 <div class="vt-timer-widget__stats">${chips.join("")}</div>
             </div>`;
@@ -366,14 +371,13 @@ vt.timer.widget = {
                 </div>
             </div>
             <div class="vt-timer-widget__bar">
-                <button class="vt-timer-widget__calbtn" title="Ouvrir le calendrier" aria-label="Calendrier">${ic(
-                    "calendar"
-                )}</button>
-                <button class="vt-timer-widget__toggle">
+                <button class="vt-timer-widget__toggle${vt.timer.widget.open ? "" : " vt-timer-widget__toggle--compact"}"${
+                    vt.timer.widget.open ? "" : ` title="${esc(vt.timer.widget._label(state))}"`
+                }>
                     <span class="vt-timer-widget__dot ${vt.timer.widget._dot(state.current_task)}"></span>
-                    <span class="vt-timer-widget__label">${esc(vt.timer.widget._label(state))}</span>
+                    ${vt.timer.widget.open ? `<span class="vt-timer-widget__label">${esc(vt.timer.widget._label(state))}</span>` : ""}
                     <span class="vt-timer-widget__chrono vt-timer-widget__chrono--toggle"></span>
-                    <span class="vt-timer-widget__caret">${ic(vt.timer.widget.open ? "chevron-down" : "chevron-up")}</span>
+                    ${vt.timer.widget.open ? `<span class="vt-timer-widget__caret">${ic("chevron-down")}</span>` : ""}
                 </button>
             </div>
         `).show();

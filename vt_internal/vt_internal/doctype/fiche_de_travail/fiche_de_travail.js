@@ -80,7 +80,9 @@ frappe.ui.form.on("Fiche de travail", {
         }
 
         // Couleurs de sections (cf. vt_forms.bundle.css).
-        const paint = (field, cls) => frm.fields_dict[field] && frm.fields_dict[field].$wrapper.addClass(cls);
+        // NB : pour un Section Break, l'objet section expose `.wrapper` (jQuery),
+        // pas `.$wrapper` — utiliser `.wrapper` sinon la classe n'est jamais posée.
+        const paint = (field, cls) => frm.fields_dict[field] && frm.fields_dict[field].wrapper.addClass(cls);
         paint("section_break_1", "vt-section--info");
         paint("section_break_odzh", "vt-section--info");
         paint("photos_avant_section", "vt-section--info");

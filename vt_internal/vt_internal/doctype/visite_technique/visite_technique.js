@@ -47,7 +47,9 @@ frappe.ui.form.on("Visite Technique", {
         }
 
         // Couleurs de sections (cf. vt_forms.bundle.css).
-        const paint = (field, cls) => frm.fields_dict[field] && frm.fields_dict[field].$wrapper.addClass(cls);
+        // NB : pour un Section Break, l'objet section expose `.wrapper` (jQuery),
+        // pas `.$wrapper` — utiliser `.wrapper` sinon la classe n'est jamais posée.
+        const paint = (field, cls) => frm.fields_dict[field] && frm.fields_dict[field].wrapper.addClass(cls);
         paint("informations_section", "vt-section--info");
         paint("section_break_woyn", "vt-section--work");
         paint("section_break_puil", "vt-section--work");

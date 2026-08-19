@@ -54,20 +54,6 @@
 						<button v-if="detail.vt" class="vtc-chip" @click="openForm('Visite Technique', detail.vt)">🔍 {{ __('Visite technique') }}</button>
 					</div>
 
-					<!-- Contrôles de la journée (comme la Fiche de travail) -->
-					<div class="vtc-day" v-if="showAtelier || showPause || showStop">
-						<div class="vtc-day-label">{{ __('Ma journée') }}</div>
-						<button v-if="showAtelier" class="vtc-action" :disabled="working" @click="dayAction('atelier')">
-							<span class="ic">🏠</span>{{ __('Chrono atelier') }}
-						</button>
-						<button v-if="showPause" class="vtc-action" :disabled="working" @click="dayAction('pause')">
-							<span class="ic">⏸️</span>{{ __('Faire une pause') }}
-						</button>
-						<button v-if="showStop" class="vtc-action danger" :disabled="working" @click="dayAction('stop')">
-							<span class="ic">⏹️</span>{{ __('Terminer la journée') }}
-						</button>
-					</div>
-
 					<button class="vtc-action subtle" @click="openForm('Event', detail.name)">
 						{{ __("Ouvrir l'événement") }} →
 					</button>
@@ -104,9 +90,6 @@ const showStart = computed(() => {
 	// Visite : masquer si on est déjà en visite technique.
 	return ct !== "Visite technique";
 });
-const showAtelier = computed(() => !!currentTask.value && !["Atelier", "Day finished"].includes(currentTask.value));
-const showPause = computed(() => !!currentTask.value && !["Pause", "Day finished", "Day not started"].includes(currentTask.value));
-const showStop = computed(() => !!currentTask.value && !["Day not started", "Day finished"].includes(currentTask.value));
 
 const isMobile = ref(window.matchMedia("(max-width: 768px)").matches);
 const mq = window.matchMedia("(max-width: 768px)");
@@ -211,17 +194,6 @@ function startTimer() {
 		: { action: "start_construction", activity_type: "Visite technique" };
 	timerApi(args, __("Tâche commencée"));
 }
-
-function dayAction(kind) {
-	const d = detail.value || {};
-	if (kind === "atelier") {
-		timerApi({ action: "start_construction", activity_type: "Atelier" }, __("Tâche commencée"));
-	} else if (kind === "pause") {
-		timerApi({ action: "start_break", fiche_de_travail: d.fdt || undefined }, __("Pause commencée"));
-	} else if (kind === "stop") {
-		timerApi({ action: "stop_day" }, __("Journée terminée"));
-	}
-}
 </script>
 
 <style scoped>
@@ -285,10 +257,6 @@ function dayAction(kind) {
 .vtc-action.primary { background: #1e88e5; border-color: #1e88e5; color: #fff; justify-content: center; font-weight: 640; }
 .vtc-action.primary:disabled { opacity: 0.6; cursor: default; }
 .vtc-action.subtle { justify-content: center; color: var(--text-muted, #6c7680); border-style: dashed; }
-.vtc-action.danger { color: #c2544d; border-color: color-mix(in srgb, #c2544d 40%, var(--border-color, #e2e6ea)); }
-.vtc-action.danger:hover { background: color-mix(in srgb, #c2544d 10%, transparent); }
-.vtc-day { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border-color, #e2e6ea); }
-.vtc-day-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted, #6c7680); font-weight: 600; }
 .vtc-links { display: flex; flex-wrap: wrap; gap: 8px; }
 .vtc-chip {
 	flex: 1; min-width: 130px; padding: 10px 12px; border-radius: 10px;

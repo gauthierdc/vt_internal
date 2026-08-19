@@ -1,10 +1,12 @@
 /* Styles des formulaires vt_internal (remplace les styles inline JS). */
 
 /* ---- Couleurs de sections (fiche de travail / visite technique) ---- */
-.vt-section--info .section-head,
-.vt-section--info { background-color: antiquewhite; }
-.vt-section--work .section-head,
-.vt-section--work { background-color: cadetblue; }
+/* !important : bat les règles Frappe (.form-section / .section-head) qui
+   fixent un fond ; l'ancien code appliquait un style inline (toujours gagnant). */
+.vt-section--info,
+.vt-section--info .section-head { background-color: antiquewhite !important; }
+.vt-section--work,
+.vt-section--work .section-head { background-color: cadetblue !important; }
 
 /* ---- Galerie photos (vt.photos) ---- */
 .vt-photos__section { margin-bottom: 20px; }
@@ -114,27 +116,37 @@
 .vt-timer-widget__chrono { color: var(--text-muted, #888); font-variant-numeric: tabular-nums; }
 .vt-timer-widget__caret { color: var(--text-muted, #888); margin-left: 2px; display: inline-flex; align-items: center; }
 .vt-timer-widget__caret .icon { width: 14px; height: 14px; }
-/* Barre du bas : bouton calendrier + pastille */
-.vt-timer-widget__bar { display: flex; align-items: center; gap: 8px; }
+/* Barre du bas : pastille de statut (repliée = bouton flottant compact) */
+.vt-timer-widget__bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .vt-timer-widget__bar .vt-timer-widget__toggle { flex: 1; }
+/* État replié : simple bouton flottant, prend le minimum de place */
+.vt-timer-widget__toggle--compact {
+	flex: 0 0 auto;
+	align-self: flex-end;
+	gap: 7px;
+	padding: 11px 13px;
+}
+.vt-timer-widget__toggle--compact .vt-timer-widget__dot { width: 12px; height: 12px; }
+.vt-timer-widget__toggle--compact .vt-timer-widget__chrono--toggle { font-weight: 600; }
+.vt-timer-widget__toggle--compact .vt-timer-widget__chrono--toggle:empty { display: none; }
+/* Bouton calendrier : intégré à l'en-tête bleu du panneau ouvert */
 .vt-timer-widget__calbtn {
 	flex: 0 0 auto;
-	width: 44px;
-	height: 44px;
+	width: 30px;
+	height: 30px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: var(--card-bg, #fff);
-	border: 1px solid var(--border-color, #e0e0e0);
+	background: rgba(255, 255, 255, 0.18);
+	border: none;
 	border-radius: 50%;
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-	color: var(--text-color, #444);
+	color: #fff;
 	cursor: pointer;
-	transition: transform 0.05s ease, color 0.1s ease, background 0.1s ease;
+	transition: transform 0.05s ease, background 0.1s ease;
 }
-.vt-timer-widget__calbtn:hover { color: #1e88e5; background: rgba(30, 136, 229, 0.08); }
+.vt-timer-widget__calbtn:hover { background: rgba(255, 255, 255, 0.34); }
 .vt-timer-widget__calbtn:active { transform: scale(0.94); }
-.vt-timer-widget__calbtn .icon { width: 20px; height: 20px; }
+.vt-timer-widget__calbtn .icon { width: 16px; height: 16px; }
 
 /* Panneau déroulant (au-dessus du bouton) */
 .vt-timer-widget__panel {
@@ -158,10 +170,11 @@
 }
 .vt-timer-widget__head-top {
 	display: flex;
-	align-items: baseline;
+	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
 }
+.vt-timer-widget__head-right { display: flex; align-items: center; gap: 8px; }
 .vt-timer-widget__head-title { font-weight: 700; font-size: 15px; letter-spacing: 0.01em; }
 .vt-timer-widget__head-date { font-size: 12px; opacity: 0.85; text-transform: capitalize; }
 .vt-timer-widget__stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
