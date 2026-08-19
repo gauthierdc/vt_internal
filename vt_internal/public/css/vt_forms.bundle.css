@@ -119,8 +119,10 @@
 /* Barre du bas : pastille de statut (repliée = bouton flottant compact) */
 .vt-timer-widget__bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .vt-timer-widget__bar .vt-timer-widget__toggle { flex: 1; }
-/* État replié : simple bouton flottant, prend le minimum de place */
-.vt-timer-widget__toggle--compact {
+/* État replié : simple bouton flottant, prend le minimum de place.
+   Sélecteur avec .vt-timer-widget__bar pour battre la règle `flex: 1`
+   ci-dessus (sinon le bouton s'étire pleine largeur sur mobile). */
+.vt-timer-widget__bar .vt-timer-widget__toggle--compact {
 	flex: 0 0 auto;
 	align-self: flex-end;
 	gap: 7px;

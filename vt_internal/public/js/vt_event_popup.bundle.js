@@ -65,6 +65,15 @@ function onCalendarClick(e) {
 	e.preventDefault();
 	e.stopImmediatePropagation();
 
+	// Mobile : le tap a pu focus l'événement et déclencher la tooltip Bootstrap
+	// (trigger "hover focus") avant ce clic. On la masque et on retire le focus.
+	try {
+		$(eventEl).tooltip("hide");
+		eventEl.blur();
+	} catch (_) {
+		/* pas de jQuery/tooltip : rien à faire */
+	}
+
 	const title = (eventEl.innerText || "").trim().split("\n").pop() || "";
 	openDrawer(parsed.name, title);
 }
@@ -75,15 +84,18 @@ frappe.after_ajax(() => {
 	// Capture-phase pour passer avant le listener natif du popover.
 	document.addEventListener("click", onCalendarClick, true);
 
-	// Désactive la tooltip "hover" native du calendrier (redondante avec le drawer,
-	// et clignotante au toucher sur mobile). jQuery implémente `mouseenter` via un
-	// `mouseover` natif, donc on capture les deux sur un .fc-event et on stoppe la
-	// propagation avant que le déclencheur Bootstrap ne s'exécute.
+	// Désactive la tooltip native du calendrier (redondante avec le drawer, et
+	// clignotante au toucher sur mobile). Le trigger Bootstrap est "hover focus" :
+	// - desktop → `mouseenter`/`mouseover` (jQuery implémente mouseenter via mouseover)
+	// - mobile  → `focusin` (le tap focus l'événement, sans hover)
+	// On capture ces événements sur un .fc-event et on stoppe la propagation avant
+	// que le déclencheur Bootstrap ne s'exécute.
 	const killTooltip = (e) => {
 		if (e.target.closest && e.target.closest(".fc-event")) e.stopImmediatePropagation();
 	};
 	document.addEventListener("mouseenter", killTooltip, true);
 	document.addEventListener("mouseover", killTooltip, true);
+	document.addEventListener("focusin", killTooltip, true);
 });
 
 // Expose pour usage éventuel ailleurs.
