@@ -477,9 +477,7 @@ export default {
 				return;
 			}
 			if (key === "nonval") {
-				const { start_date, end_date } = this.store.filters;
-				frappe.route_options = { docstatus: 0, end_date: ["between", [start_date, end_date]] };
-				frappe.set_route("List", "Timesheet");
+				this.openNameList("Timesheet", (this.data.doc_names || {}).nonval || []);
 				return;
 			}
 			this.activeAlert = this.activeAlert === key ? null : key;
@@ -500,17 +498,18 @@ export default {
 		kpiClickable(key) { return ["ca", "po", "depenses", "fabrication"].includes(key); },
 		kpiClick(key) {
 			if (!this.kpiClickable(key)) return;
-			const { start_date, end_date } = this.store.filters;
-			const between = ["between", [start_date, end_date]];
-			const map = {
-				ca: { dt: "Sales Invoice", ro: { docstatus: 1, is_return: 0, is_down_payment_invoice: 0, posting_date: between } },
-				po: { dt: "Purchase Order", ro: { transaction_date: between } },
-				depenses: { dt: "Expense", ro: { expense_date: between } },
-				fabrication: { dt: "Fabrication VT", ro: { creation: between } },
-			};
-			const cfg = map[key];
-			frappe.route_options = cfg.ro;
-			frappe.set_route("List", cfg.dt);
+			const dtMap = { ca: "Sales Invoice", po: "Purchase Order", depenses: "Expense", fabrication: "Fabrication VT" };
+			this.openNameList(dtMap[key], (this.data.doc_names || {})[key] || []);
+		},
+		// Ouvre la liste filtrée exactement sur les documents du total (name IN),
+		// seul moyen de refléter le filtre conducteur (qui porte sur le projet).
+		openNameList(dt, names) {
+			if (!names.length) {
+				frappe.show_alert({ message: __("Aucun document sur la période"), indicator: "orange" });
+				return;
+			}
+			frappe.route_options = { [dt + ".name"]: ["in", names] };
+			frappe.set_route("List", dt);
 		},
 		openIncidents(projectNames) {
 			if (!projectNames || !projectNames.length) return;

@@ -710,6 +710,64 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	)
 	meta_companies = frappe.get_all("Company", pluck="name", order_by="name")
 
+	# --- Noms exacts des documents composant chaque KPI ------------------------
+	# Le filtre "conducteur" porte sur le Projet, pas sur ces documents : le seul
+	# moyen d'ouvrir une liste qui reflète EXACTEMENT le total est de filtrer par
+	# `name IN [...]`. On renvoie donc la liste des documents de chaque KPI.
+	def _names(sql, params):
+		return frappe.db.sql(sql, tuple(params), pluck=True)
+
+	inv_names = _names(
+		f"""
+		SELECT si.name FROM `tabSales Invoice` si
+		JOIN `tabProject` p ON p.name = si.project
+		WHERE si.docstatus = 1 AND si.is_return = 0
+		  AND (si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)
+		  AND p.custom_estimated_labor_hours > 1
+		  AND si.posting_date BETWEEN %s AND %s{comp_si}{cm_sql}
+		""",
+		[start_date, end_date, *comp_psi, *cm_p],
+	)
+	po_join2 = " JOIN `tabProject` p ON p.name = poi.project" if cm_list else ""
+	po_names = _names(
+		f"""
+		SELECT DISTINCT po.name FROM `tabPurchase Order Item` poi
+		JOIN `tabPurchase Order` po ON po.name = poi.parent{po_join2}
+		WHERE po.docstatus < 2 AND poi.project IS NOT NULL AND poi.project != ''
+		  AND po.transaction_date BETWEEN %s AND %s{comp_po}{cm_sql}
+		""",
+		[start_date, end_date, *comp_po_p, *cm_p],
+	)
+	exp_join2 = " JOIN `tabProject` p ON p.name = e.project" if cm_list else ""
+	exp_names = _names(
+		f"""
+		SELECT e.name FROM `tabExpense` e{exp_join2}
+		WHERE e.docstatus < 2 AND e.project IS NOT NULL AND e.project != ''
+		  AND e.expense_date BETWEEN %s AND %s{comp_exp}{cm_sql}
+		""",
+		[start_date, end_date, *comp_exp_p, *cm_p],
+	)
+	fab_join2 = " JOIN `tabProject` p ON p.name = f.project" if cm_list else ""
+	fab_names = _names(
+		f"""
+		SELECT f.name FROM `tabFabrication VT` f{fab_join2}
+		WHERE f.status != 'Annulé' AND f.project IS NOT NULL AND f.project != ''
+		  AND DATE(f.creation) BETWEEN %s AND %s{comp_fab}{cm_sql}
+		""",
+		[start_date, end_date, *comp_fab_p, *cm_p],
+	)
+	ts_join2 = " JOIN `tabProject` p ON p.name = d.project" if cm_list else ""
+	ts_draft_names = _names(
+		f"""
+		SELECT DISTINCT t.name FROM `tabTimesheet` t
+		JOIN `tabTimesheet Detail` d ON d.parent = t.name{ts_join2}
+		WHERE t.docstatus = 0
+		  AND COALESCE(d.activity_type, '') NOT IN ({excl})
+		  AND t.end_date BETWEEN %s AND %s{comp_t}{cm_sql}
+		""",
+		[*EXCLUDED_ACTIVITIES, start_date, end_date, *comp_pt, *cm_p],
+	)
+
 	return {
 		"period": {
 			"start_date": str(start_date),
@@ -719,6 +777,13 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 			"days": length + 1,
 		},
 		"meta": {"conducteurs": meta_conducteurs, "companies": meta_companies},
+		"doc_names": {
+			"ca": inv_names,
+			"po": po_names,
+			"depenses": exp_names,
+			"fabrication": fab_names,
+			"nonval": ts_draft_names,
+		},
 		"kpis": kpis,
 		"kpis_prev": kpis_prev,
 		"projects": projects,

@@ -16,6 +16,17 @@ function todayMinus(days) {
 	return frappe.datetime.add_days(frappe.datetime.get_today(), days);
 }
 
+// Lit les filtres depuis la query string de l'URL (partage / navigation).
+function readUrlFilters() {
+	const q = new URLSearchParams(window.location.search);
+	const f = {};
+	if (q.get("start")) f.start_date = q.get("start");
+	if (q.get("end")) f.end_date = q.get("end");
+	if (q.get("company")) f.company = q.get("company");
+	if (q.get("cm")) f.conducteurs = q.get("cm").split(",").filter(Boolean);
+	return f;
+}
+
 class ChantiersView {
 	constructor({ wrapper, page }) {
 		this.$wrapper = $(wrapper);
@@ -31,6 +42,8 @@ class ChantiersView {
 				end_date: frappe.datetime.get_today(),
 				company: null,
 				conducteurs: [],
+				// Écrase les valeurs par défaut avec celles de l'URL si présentes.
+				...readUrlFilters(),
 			},
 			// Callbacks fournis au composant.
 			openProject: (name) => window.openProjectDetails(name),
@@ -66,8 +79,22 @@ class ChantiersView {
 		);
 	}
 
+	// Écrit les filtres courants dans la query string (sans recharger la page).
+	syncUrl() {
+		const f = this.store.filters;
+		const q = new URLSearchParams();
+		if (f.start_date) q.set("start", f.start_date);
+		if (f.end_date) q.set("end", f.end_date);
+		if (f.company) q.set("company", f.company);
+		if (f.conducteurs && f.conducteurs.length) q.set("cm", f.conducteurs.join(","));
+		const qs = q.toString();
+		const url = window.location.pathname + (qs ? "?" + qs : "");
+		window.history.replaceState(window.history.state, "", url);
+	}
+
 	reload() {
 		const f = this.store.filters;
+		this.syncUrl();
 		this.store.loading = true;
 		this.store.error = null;
 		// On utilise les callbacks natifs de frappe.call plutôt que le chaînage de
