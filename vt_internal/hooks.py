@@ -24,6 +24,9 @@ app_include_css = [
 ]
 app_include_js = [
 	"bundle_editor_patch.bundle.js",
+	# Désactive le pricing dashboard upstream qui gèle les grosses fiches (dokos/dokos#699)
+	# TODO(remove): retirer cette ligne + le fichier une fois dokos/dokos#699 corrigé
+	"disable_pricing_dashboard.bundle.js",
 	"customer_quick_entry.bundle.js",
 	"vt_sidebar_default.bundle.js",
 	"vt_event_popup.bundle.js",
