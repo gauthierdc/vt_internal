@@ -15,12 +15,13 @@ def before_insert(doc, method=None):
 def validate(doc, method=None):
     # --- depuis Server Script « Fiche de travail status 2 » (Before Save) ---
 
-    if doc.sav:
-        if not doc.référence_pièce.startswith('SAV - '):
-            doc.référence_pièce = 'SAV - ' + doc.référence_pièce
-    else:
-        if doc.référence_pièce.startswith('SAV - '):
-            doc.référence_pièce = doc.référence_pièce.replace('SAV - ', '', 1)
+    if doc.référence_pièce:
+        if doc.sav:
+            if not doc.référence_pièce.startswith('SAV - '):
+                doc.référence_pièce = 'SAV - ' + doc.référence_pièce
+        else:
+            if doc.référence_pièce.startswith('SAV - '):
+                doc.référence_pièce = doc.référence_pièce.replace('SAV - ', '', 1)
 
 
     if doc.status == "Fait" and not doc.completion_on:
@@ -71,12 +72,13 @@ def validate(doc, method=None):
 def before_update_after_submit(doc, method=None):
     # --- depuis Server Script « Fiche de travail status à la validation » (Before Save (Submitted Document)) ---
 
-    if doc.sav:
-        if not doc.référence_pièce.startswith('SAV - '):
-            doc.référence_pièce = 'SAV - ' + doc.référence_pièce
-    else:
-        if doc.référence_pièce.startswith('SAV - '):
-            doc.référence_pièce = doc.référence_pièce.replace('SAV - ', '', 1)
+    if doc.référence_pièce:
+        if doc.sav:
+            if not doc.référence_pièce.startswith('SAV - '):
+                doc.référence_pièce = 'SAV - ' + doc.référence_pièce
+        else:
+            if doc.référence_pièce.startswith('SAV - '):
+                doc.référence_pièce = doc.référence_pièce.replace('SAV - ', '', 1)
 
 
 
