@@ -97,10 +97,14 @@ def new_fabrication():
 
 
 @frappe.whitelist()
-def update_manufacturing_status():
+def update_manufacturing_status(fabrication=None, carte_travail=None):
     # Converti depuis le Server Script API « Mise à jour des statuts de fabrication » (/api/method/update_manufacturing_status).
-    carte_travail = frappe.form_dict.carte_travail
-    fabrication = frappe.form_dict.fabrication
+    # Les paramètres peuvent être passés en argument (appel interne, ex-`run_script`)
+    # ou récupérés depuis form_dict (appel via l'endpoint whitelisted).
+    if carte_travail is None:
+        carte_travail = frappe.form_dict.get("carte_travail")
+    if fabrication is None:
+        fabrication = frappe.form_dict.get("fabrication")
 
     # Mettre à jour les cartes de travail si la fabrication est passé à faite
     if fabrication and fabrication.status == "Fait":
@@ -158,13 +162,15 @@ def update_manufacturing_status():
         frappe.db.set_value('Fiche de travaux - Todo', fiche_de_travail_item, "status", custom_statut_interne)
     if(frappe.db.get_value('Sales Order Item', fabrication.row_item_code, "custom_statut_interne") != custom_statut_interne):
         frappe.db.set_value('Sales Order Item', fabrication.row_item_code, "custom_statut_interne", custom_statut_interne)
-        run_script("Mise à jour des statuts de fabrication dans la commande", doc=frappe.get_doc("Sales Order", fabrication.customer_order))
+        update_manufacturing_status_in_order(doc=frappe.get_doc("Sales Order", fabrication.customer_order))
 
 
 @frappe.whitelist()
-def update_manufacturing_status_in_order():
+def update_manufacturing_status_in_order(doc=None):
     # Converti depuis le Server Script API « Mise à jour des statuts de fabrication dans la commande » (sans api_method).
-    doc = frappe.form_dict.doc
+    # `doc` peut être passé en argument (appel interne, ex-`run_script`) ou via form_dict.
+    if doc is None:
+        doc = frappe.form_dict.doc
 
     items_status = [el.custom_statut_interne for el in doc.items]
     total_ordered = sum([ 1 if el != "" else 0 for el in items_status])

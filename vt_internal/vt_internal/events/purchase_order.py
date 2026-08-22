@@ -6,6 +6,8 @@ Source de vérité : ce fichier (versionné). Les records DB ont été supprimé
 
 import frappe
 
+from vt_internal.vt_internal.api.fabrication import update_manufacturing_status_in_order
+
 
 def before_validate(doc, method=None):
     # --- depuis Server Script « Before validate Commande fournisseur » (Before Validate) ---
@@ -46,7 +48,7 @@ def on_submit(doc, method=None):
     sales_orders_to_update = list(dict.fromkeys([item.sales_order or "" for item in doc.items]))
     for so in sales_orders_to_update:
         if so:
-            run_script("Mise à jour des statuts de fabrication dans la commande", doc=frappe.get_doc("Sales Order", so))
+            update_manufacturing_status_in_order(doc=frappe.get_doc("Sales Order", so))
 
 
 def before_update_after_submit(doc, method=None):
