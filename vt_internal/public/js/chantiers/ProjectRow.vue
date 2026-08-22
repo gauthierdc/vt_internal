@@ -1,5 +1,5 @@
 <template>
-	<tr :class="{ sav: p.is_sav }">
+	<tr>
 		<td class="vtc-name">
 			<a href="#" @click.prevent="$emit('open', p.project)">{{ p.project }}</a>
 			<span v-if="p.type_projet" class="vtc-type">{{ p.type_projet }}</span>
@@ -42,6 +42,7 @@
 				</div>
 			</div>
 		</td>
+		<td class="num vtc-total-proj">{{ p.total_sold ? fmtMoney(p.total_sold) : '—' }}</td>
 		<td>
 			<a class="vtc-fact vtc-link-block" href="#" :data-tip="__('Voir toutes les factures de vente du chantier')" @click.prevent="$emit('docs', { project: p.project, kind: 'invoices_all' })">
 				<div class="vtc-fact-track"><div class="fill" :style="{ width: Math.min(p.pct_facture, 100) + '%' }"></div></div>
@@ -50,15 +51,13 @@
 		</td>
 		<td class="num"><span v-if="p.retard > 0" class="vtc-late">+{{ p.retard }}j</span><span v-else>—</span></td>
 		<td class="vtc-flags">
-			<span v-if="p.is_sav" class="flag sav" data-tip="Heures sur chantier déjà facturé (SAV)">SAV</span>
 			<button
 				v-if="p.nb_incidents"
 				class="flag inc" :class="{ closed: !p.nb_incidents_ouverts }"
-				:data-tip="p.nb_incidents + ' incident(s) qualité — cliquer pour ouvrir'"
+				:data-tip="p.nb_incidents + ' incident(s) qualité (ouverts + fermés) — cliquer pour ouvrir la liste'"
 				@click.stop="$emit('incidents', p.project)"
-			>⚠️{{ p.nb_incidents_ouverts || p.nb_incidents }}</button>
-			<span v-if="p.is_facture && !p.nb_receptions" class="flag norec" data-tip="Facturé sans réception de travaux">📝∅</span>
-			<span v-if="p.nb_receptions" class="flag rec" data-tip="Réception de travaux">📝</span>
+			>⚠️{{ p.nb_incidents }}</button>
+			<span v-if="p.nb_receptions" class="flag rec" data-tip="Réception de travaux enregistrée">📝</span>
 		</td>
 	</tr>
 </template>
@@ -97,7 +96,7 @@ export default {
 
 <style scoped>
 .num { text-align: right; }
-tr.sav td { background: rgba(198, 40, 40, .045); }
+.vtc-total-proj { font-weight: 560; }
 td { padding: 9px 12px; border-bottom: 1px solid var(--border-color, #f0f2f4); vertical-align: middle; }
 tr:hover td { background: var(--control-bg, #f7f9fa); }
 .vtc-name a { font-weight: 620; color: var(--blue-600, #1565c0); }
@@ -142,9 +141,7 @@ tr:hover td { background: var(--control-bg, #f7f9fa); }
 
 .vtc-flags { white-space: nowrap; }
 .vtc-flags .flag { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 5px; border-radius: 4px; margin-right: 3px; border: none; font-family: inherit; }
-.vtc-flags .flag.sav { background: #c62828; color: #fff; }
 .vtc-flags button.flag.inc { background: rgba(245, 124, 0, .16); color: #e65100; cursor: pointer; }
 .vtc-flags button.flag.inc:hover { background: rgba(245, 124, 0, .3); }
 .vtc-flags button.flag.inc.closed { background: var(--control-bg, #eef1f3); color: var(--text-muted, #9aa4ad); }
-.vtc-flags .flag.norec { background: rgba(198, 40, 40, .12); color: #c62828; }
 </style>

@@ -348,7 +348,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	billed_all_map, last_activity_map = {}, {}
 	reception_map, incident_map = {}, {}
 	meta_map, theo_map = {}, {}
-	po_all_map, fab_all_map, expected_map, actual_map = {}, {}, {}, {}
+	po_all_map, fab_all_map, expected_map, actual_map, so_total_map = {}, {}, {}, {}, {}
 	if project_names:
 		ph = ",".join(["%s"] * len(project_names))
 
@@ -457,12 +457,13 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		# get_project_labour_hours.
 		for r in frappe.db.sql(
 			f"""
-			SELECT project, SUM(custom_labour_hours) AS h
+			SELECT project, SUM(custom_labour_hours) AS h, SUM(total) AS montant
 			FROM `tabSales Order`
 			WHERE project IN ({ph}) AND docstatus = 1 AND custom_exclude_from_statistics != 1
 			GROUP BY project
 			""", tuple(project_names), as_dict=True):
 			expected_map[r.project] = r.h or 0
+			so_total_map[r.project] = round(r.montant or 0)
 		for r in frappe.db.sql(
 			f"""
 			SELECT d.project AS project, SUM(d.hours) AS h
@@ -503,7 +504,9 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		hours_expected = round(expected_map.get(name, 0))
 		hours_total = round(actual_map.get(name, 0))
 
-		total_sold = round(p.total_sales_amount or 0)
+		# Montant total du projet = somme des commandes client (Sales Orders),
+		# avec repli sur total_sales_amount si aucune commande.
+		total_sold = so_total_map.get(name, 0) or round(p.total_sales_amount or 0)
 		billed_all = billed_all_map.get(name, 0)
 		pct_facture = round(billed_all / total_sold * 100) if total_sold > 0 else 0
 		reste_a_facturer = max(0, total_sold - billed_all)

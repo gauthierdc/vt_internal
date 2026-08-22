@@ -48,10 +48,13 @@
 			</div>
 
 			<!-- Société -->
-			<select class="vtc-select" :value="store.filters.company || ''" @change="onCompany($event)">
-				<option value="">{{ __('Toutes les sociétés') }}</option>
-				<option v-for="co in data.meta.companies" :key="co" :value="co">{{ co }}</option>
-			</select>
+			<DropSelect
+				icon="🏢"
+				:model-value="store.filters.company || ''"
+				:all-label="__('Toutes les sociétés')"
+				:options="data.meta.companies.map((c) => ({ value: c, label: c }))"
+				@update:model-value="(v) => { store.filters.company = v || null; store.reload(); }"
+			/>
 
 			<button v-if="selectedCM.length || store.filters.company" class="vtc-clearall" @click="clearGlobal">
 				✕ {{ __('Réinitialiser') }}
@@ -144,10 +147,17 @@
 						@click="fluxFilter[ft.key] = !fluxFilter[ft.key]"
 					>{{ ft.icon }} {{ ft.label }}</button>
 				</div>
-				<select class="vtc-select" v-model="facetType">
-					<option value="">{{ __('Tous les types') }}</option>
-					<option v-for="t in typeOptions" :key="t" :value="t">{{ t }}</option>
-				</select>
+				<DropSelect
+					icon="🏷️"
+					v-model="facetType"
+					:all-label="__('Tous les types')"
+					:options="typeOptions.map((t) => ({ value: t, label: t }))"
+				/>
+				<div class="vtc-seg" :data-tip="__('Avancement de facturation = facturé ÷ commandé.')">
+					<button :class="{ active: facBilling === '' }" @click="facBilling = ''">{{ __('Facturation') }}</button>
+					<button :class="{ active: facBilling === 'full' }" @click="facBilling = 'full'">{{ __('100 %') }}</button>
+					<button :class="{ active: facBilling === 'partial' }" @click="facBilling = 'partial'">{{ __('Non 100 %') }}</button>
+				</div>
 				<label class="vtc-check"><input type="checkbox" v-model="groupByCM" /> {{ __('Grouper par conducteur') }}</label>
 				<span class="vtc-count">{{ filtered.length }} / {{ data.projects.length }} {{ __('chantiers') }}</span>
 			</div>
@@ -162,6 +172,7 @@
 							<th @click="sortBy('flux')" class="sortable" :data-tip="__('Flux financiers de la période, par chantier : 🧾 Facturé (ventes) · 🛒 Achats (commandes fournisseur) · 💳 Dépenses (notes de frais) · 🏭 Fabrication VT. Cliquer un montant ouvre la liste correspondante. Tri = total.')">{{ __('Flux (pér.)') }} <SortIc :dir="sortDir" :on="sortKey === 'flux'" /></th>
 							<th @click="sortBy('marge_reel')" class="sortable" :data-tip="__('Barre = marge réelle (vente − coûts réels) ÷ vente. Trait vertical = marge théorique (basée sur les devis). Badge = écart réel − théorique, en points.')">{{ __('Marge') }} <SortIc :dir="sortDir" :on="sortKey === 'marge_reel'" /></th>
 							<th @click="sortBy('heures_periode')" class="sortable" :data-tip="__('Heures pointées SUR LA PÉRIODE : validées + non validées (brouillon). Sous-texte : cumul total du chantier / heures prévues (vendues).')">{{ __('Pointé (pér.)') }} <SortIc :dir="sortDir" :on="sortKey === 'heures_periode'" /></th>
+							<th @click="sortBy('total_sold')" class="sortable num" :data-tip="__('Montant total du projet = somme des commandes client (Sales Orders) rattachées au chantier, HT.')">{{ __('Total projet') }} <SortIc :dir="sortDir" :on="sortKey === 'total_sold'" /></th>
 							<th @click="sortBy('pct_facture')" class="sortable" :data-tip="__('Avancement de facturation (tout l’historique) : total facturé ÷ total commandé (HT). « reste » = commandé − facturé.')">{{ __('Facturation cumul') }} <SortIc :dir="sortDir" :on="sortKey === 'pct_facture'" /></th>
 							<th @click="sortBy('retard')" class="sortable num" :data-tip="__('Jours écoulés depuis la date de fin prévue, pour les chantiers non encore facturés.')">{{ __('Retard') }} <SortIc :dir="sortDir" :on="sortKey === 'retard'" /></th>
 							<th :data-tip="__('SAV = repointage sur chantier facturé · ⚠️ = incidents qualité (cliquable) · 📝∅ = facturé sans réception · 📝 = réception présente.')">{{ __('Alertes') }}</th>
@@ -172,7 +183,7 @@
 					<template v-if="groupByCM">
 						<tbody v-for="g in grouped" :key="g.name">
 							<tr class="vtc-group-row">
-								<td colspan="8">
+								<td colspan="9">
 									<span class="vtc-group-name">👷 {{ g.name }}</span>
 									<span class="vtc-group-meta">{{ g.rows.length }} {{ __('chantiers') }} · {{ g.heures }}h · {{ fmtMoney(g.ca) }}</span>
 								</td>
@@ -182,23 +193,42 @@
 					</template>
 					<tbody v-else>
 						<ProjectRow v-for="p in filtered" :key="p.project" :p="p" :maxHours="maxHours" @open="store.openProject" @incidents="openIncidents([$event])" @docs="openDocs" />
-						<tr v-if="!filtered.length"><td colspan="8" class="vtc-empty">{{ __('Aucun chantier') }}</td></tr>
+						<tr v-if="!filtered.length"><td colspan="9" class="vtc-empty">{{ __('Aucun chantier') }}</td></tr>
 					</tbody>
+					<tfoot v-if="filtered.length">
+						<tr class="vtc-total-row">
+							<td>{{ __('Total') }}</td>
+							<td>{{ totals.count }} {{ __('chantiers') }}</td>
+							<td class="vtc-flux-tot">
+								<span v-if="totals.ca" class="ft fin">🧾 {{ fmtCompact(totals.ca) }}</span>
+								<span v-if="totals.po" class="ft po">🛒 {{ fmtCompact(totals.po) }}</span>
+								<span v-if="totals.dep" class="ft dep">💳 {{ fmtCompact(totals.dep) }}</span>
+								<span v-if="totals.fab" class="ft fab">🏭 {{ fmtCompact(totals.fab) }}</span>
+							</td>
+							<td></td>
+							<td><b>{{ totals.hv }}h</b><span v-if="totals.hd" class="td-draft">+{{ totals.hd }}h</span></td>
+							<td class="num">{{ fmtMoney(totals.total_sold) }}</td>
+							<td class="num" :data-tip="__('Reste à facturer cumulé')"><span v-if="totals.reste">{{ __('reste') }} {{ fmtMoney(totals.reste) }}</span></td>
+							<td></td>
+							<td></td>
+						</tr>
+					</tfoot>
 				</table>
 			</div>
 
 			<!-- Chantiers sans pointage -->
 			<div class="vtc-card vtc-nopointage" v-if="data.sans_pointage.length">
 				<div class="vtc-card-title">
-					⚠️ {{ __('Chantiers décrochés — pointés la période précédente, plus rien depuis') }}
+					<span :data-tip="decrochesTip">⚠️ {{ __('Chantiers décrochés — pointés la période précédente, plus rien depuis') }}</span>
 					<span class="vtc-badge-count">{{ data.sans_pointage.length }}</span>
+					<button class="vtc-decroches-link" @click="openDecroches">↗ {{ __('Voir la liste') }}</button>
 				</div>
 				<div class="vtc-chips">
 					<button
 						v-for="s in data.sans_pointage" :key="s.project"
 						class="vtc-chip-np" :class="{ late: s.retard > 0 }"
 						@click="store.openProject(s.project)"
-						:title="s.customer"
+						:data-tip="__('Ouvrir le détail du chantier') + ' · ' + (s.customer || '')"
 					>
 						<b>{{ s.project }}</b>
 						<span class="np-client">{{ s.customer }}</span>
@@ -214,6 +244,7 @@
 <script>
 import { h } from "vue";
 import ProjectRow from "./ProjectRow.vue";
+import DropSelect from "./DropSelect.vue";
 import { ACT_COLORS, fmtMoney, fmtCompact } from "./helpers.js";
 
 // Petite flèche de tri (composant fonctionnel avec fonction de rendu, donc
@@ -224,12 +255,13 @@ SortIc.props = ["dir", "on"];
 
 export default {
 	name: "ChantiersApp",
-	components: { SortIc, ProjectRow },
+	components: { SortIc, ProjectRow, DropSelect },
 	props: { store: Object },
 	data() {
 		return {
 			search: "",
 			facetType: "",
+			facBilling: "", // "" | full | partial
 			// Filtres par type de flux (tous cochés par défaut).
 			fluxFilter: { pointe: true, facture: true, achat: true, depense: true, fab: true },
 			fluxTypes: [
@@ -271,6 +303,10 @@ export default {
 		prevLabel() {
 			const p = this.data.period;
 			return `(${this.fmtDate(p.prev_start)} → ${this.fmtDate(p.prev_end)})`;
+		},
+		decrochesTip() {
+			const p = this.data.period;
+			return __("Chantiers actifs qui ont reçu des heures pendant la période PRÉCÉDENTE ({0} → {1}) mais AUCUNE pendant la période courante : on a arrêté de pointer dessus (chantier à l'arrêt, oublié, ou à clôturer).", [this.fmtDate(p.prev_start), this.fmtDate(p.prev_end)]);
 		},
 
 		kpiCards() {
@@ -334,14 +370,10 @@ export default {
 					__("Heures pointées mais dont la feuille de temps est encore en brouillon (non soumise), sur la période. Cliquer pour AFFICHER ces feuilles de temps à valider.")),
 				mk("over", "⏱", __("Dépassement heures"), "warn", P.filter((p) => p.heures_expected && p.heures_diff > 0).length,
 					__("Chantiers dont le cumul d'heures pointées dépasse les heures prévues (vendues). Cliquer pour filtrer le tableau.")),
-				mk("margin", "📉", __("Marge en chute"), "danger", P.filter((p) => p.marge_diff < -7).length,
+				mk("margin", "📉", __("Alerte marge"), "danger", P.filter((p) => p.marge_diff < -7).length,
 					__("Chantiers dont la marge réelle est inférieure de plus de 7 points à la marge théorique. Cliquer pour filtrer.")),
-				mk("sav", "🔧", __("SAV (repointage)"), "danger", P.filter((p) => p.is_sav).length,
-					__("Chantiers déjà facturés (Terminé) sur lesquels des heures ont été repointées pendant la période. Cliquer pour filtrer.")),
-				mk("inc", "⚠️", __("Incidents ouverts"), "danger", P.filter((p) => p.nb_incidents_ouverts > 0).length,
-					__("Chantiers avec au moins un incident qualité non résolu. Cliquer pour OUVRIR la liste des incidents concernés.")),
-				mk("norec", "📝", __("Facturé sans réception"), "warn", P.filter((p) => p.is_facture && !p.nb_receptions).length,
-					__("Chantiers facturés (Terminé) sans réception de travaux enregistrée. Cliquer pour filtrer.")),
+				mk("inc", "⚠️", __("Incidents"), "danger", P.filter((p) => p.nb_incidents > 0).length,
+					__("Chantiers avec au moins un incident qualité (ouverts ET fermés). Cliquer pour OUVRIR la liste des incidents concernés.")),
 			].filter((a) => a.count > 0);
 		},
 		filtered() {
@@ -349,6 +381,8 @@ export default {
 			const q = this.search.trim().toLowerCase();
 			if (q) rows = rows.filter((p) => (p.project + " " + p.client + " " + p.conducteur_nom).toLowerCase().includes(q));
 			if (this.facetType) rows = rows.filter((p) => p.type_projet === this.facetType);
+			if (this.facBilling === "full") rows = rows.filter((p) => p.pct_facture >= 100);
+			else if (this.facBilling === "partial") rows = rows.filter((p) => p.pct_facture < 100);
 			// Filtre par type de flux (OU sur les types cochés). Si tout est coché,
 			// aucun filtrage (tous les chantiers ont au moins un flux).
 			const ff = this.fluxFilter;
@@ -372,6 +406,21 @@ export default {
 			});
 			return rows;
 		},
+		totals() {
+			const r = this.filtered;
+			const sum = (fn) => r.reduce((s, p) => s + (fn(p) || 0), 0);
+			return {
+				count: r.length,
+				ca: sum((p) => p.ca_periode),
+				po: sum((p) => p.po_periode),
+				dep: sum((p) => p.depense_periode),
+				fab: sum((p) => p.fab_periode),
+				hv: sum((p) => p.heures_val),
+				hd: sum((p) => p.heures_draft),
+				total_sold: sum((p) => p.total_sold),
+				reste: sum((p) => p.reste_a_facturer),
+			};
+		},
 		grouped() {
 			const map = {};
 			this.filtered.forEach((p) => {
@@ -390,6 +439,7 @@ export default {
 	},
 	methods: {
 		fmtMoney,
+		fmtCompact,
 		// --- Période ---
 		iso(d) {
 			return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -444,10 +494,6 @@ export default {
 			this.cmOpen = false;
 			this.applyCM();
 		},
-		onCompany(e) {
-			this.store.filters.company = e.target.value || null;
-			this.store.reload();
-		},
 		clearGlobal() {
 			this.selectedCM = [];
 			this.store.filters.conducteurs = [];
@@ -472,7 +518,7 @@ export default {
 			// Certaines alertes ouvrent directement une liste (les autres filtrent
 			// le tableau).
 			if (key === "inc") {
-				const names = this.data.projects.filter((p) => p.nb_incidents_ouverts > 0).map((p) => p.project);
+				const names = this.data.projects.filter((p) => p.nb_incidents > 0).map((p) => p.project);
 				this.openIncidents(names);
 				return;
 			}
@@ -503,6 +549,10 @@ export default {
 		},
 		// Ouvre la liste filtrée exactement sur les documents du total (name IN),
 		// seul moyen de refléter le filtre conducteur (qui porte sur le projet).
+		openDecroches() {
+			const names = (this.data.sans_pointage || []).map((s) => s.project);
+			this.openNameList("Project", names);
+		},
 		openNameList(dt, names) {
 			if (!names.length) {
 				frappe.show_alert({ message: __("Aucun document sur la période"), indicator: "orange" });
@@ -542,9 +592,6 @@ export default {
 			switch (key) {
 				case "over": return p.heures_expected && p.heures_diff > 0;
 				case "margin": return p.marge_diff < -7;
-				case "sav": return p.is_sav;
-				case "inc": return p.nb_incidents_ouverts > 0;
-				case "norec": return p.is_facture && !p.nb_receptions;
 			}
 			return true;
 		},
@@ -746,9 +793,21 @@ export default {
 .vtc-group-row td { background: var(--control-bg, #f2f4f6); font-weight: 600; }
 .vtc-group-name { font-size: 13px; } .vtc-group-meta { font-size: 12px; color: var(--text-muted, #6c7680); margin-left: 12px; }
 
+/* Ligne de totaux */
+.vtc-total-row td { position: sticky; bottom: 0; background: var(--card-bg, #fff); border-top: 2px solid var(--border-color, #d1d8dd); font-weight: 680; font-size: 13px; padding: 10px 12px; }
+.vtc-total-row .td-draft { color: #e08600; font-weight: 700; margin-left: 3px; }
+.vtc-flux-tot { display: flex; flex-wrap: wrap; gap: 5px; }
+.vtc-flux-tot .ft { padding: 2px 7px; border-radius: 6px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.vtc-flux-tot .ft.fin { background: rgba(46,125,50,.14); color: #2e7d32; }
+.vtc-flux-tot .ft.po { background: rgba(25,118,210,.14); color: #1565c0; }
+.vtc-flux-tot .ft.dep { background: rgba(245,124,0,.16); color: #e65100; }
+.vtc-flux-tot .ft.fab { background: rgba(126,87,194,.16); color: #6a3fb0; }
+
 /* Sans pointage */
 .vtc-nopointage { margin-top: 16px; }
 .vtc-badge-count { background: #f57c00; color: #fff; border-radius: 999px; padding: 1px 8px; font-size: 11px; }
+.vtc-decroches-link { margin-left: auto; border: 1px solid var(--border-color, #e2e6ea); background: var(--card-bg, #fff); color: var(--blue-600, #1565c0); border-radius: 8px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; text-transform: none; }
+.vtc-decroches-link:hover { border-color: var(--blue-400, #64b5f6); }
 .vtc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .vtc-chip-np { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-color, #e2e6ea); background: var(--control-bg, #f7f9fa); border-radius: 9px; padding: 7px 11px; font-size: 12px; cursor: pointer; color: var(--text-color, #1f272e); }
 .vtc-chip-np:hover { border-color: var(--gray-400, #b0b8bf); }
