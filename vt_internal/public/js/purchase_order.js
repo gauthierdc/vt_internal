@@ -25,6 +25,7 @@ frappe.ui.form.on('Purchase Order', {
         // Rafraîchir le champ contact_person quand on change de fournisseur
         frm.set_query('contact_person', () => {
             return {
+                query: 'frappe.contacts.doctype.contact.contact.contact_query',
                 filters: {
                     link_doctype: 'Supplier',
                     link_name: frm.doc.supplier
