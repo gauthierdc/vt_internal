@@ -56,7 +56,17 @@
 				@update:model-value="(v) => { store.filters.company = v || null; store.reload(); }"
 			/>
 
-			<button v-if="selectedCM.length || store.filters.company" class="vtc-clearall" @click="clearGlobal">
+			<!-- Centre de coût (VT internal) -->
+			<DropSelect
+				v-if="data.meta.cost_centers && data.meta.cost_centers.length"
+				icon="🏦"
+				:model-value="store.filters.cost_center || ''"
+				:all-label="__('Tous les centres de coût')"
+				:options="data.meta.cost_centers"
+				@update:model-value="(v) => { store.filters.cost_center = v || null; store.reload(); }"
+			/>
+
+			<button v-if="selectedCM.length || store.filters.company || store.filters.cost_center" class="vtc-clearall" @click="clearGlobal">
 				✕ {{ __('Réinitialiser') }}
 			</button>
 		</div>
@@ -216,26 +226,31 @@
 				</table>
 			</div>
 
-			<!-- Chantiers sans pointage -->
-			<div class="vtc-card vtc-nopointage" v-if="data.sans_pointage.length">
-				<div class="vtc-card-title">
+			<!-- Chantiers décrochés (tableau identique aux chantiers de la période) -->
+			<div class="vtc-card vtc-nopointage vtc-table-wrap" v-if="decroches.length">
+				<div class="vtc-card-title vtc-decroches-head">
 					<span :data-tip="decrochesTip">⚠️ {{ __('Chantiers décrochés — pointés la période précédente, plus rien depuis') }}</span>
-					<span class="vtc-badge-count">{{ data.sans_pointage.length }}</span>
+					<span class="vtc-badge-count">{{ decroches.length }}</span>
 					<button class="vtc-decroches-link" @click="openDecroches">↗ {{ __('Voir la liste') }}</button>
 				</div>
-				<div class="vtc-chips">
-					<button
-						v-for="s in data.sans_pointage" :key="s.project"
-						class="vtc-chip-np" :class="{ late: s.retard > 0 }"
-						@click="store.openProject(s.project)"
-						:data-tip="__('Ouvrir le détail du chantier') + ' · ' + (s.customer || '')"
-					>
-						<b>{{ s.project }}</b>
-						<span class="np-client">{{ s.customer }}</span>
-						<span v-if="s.retard > 0" class="np-late">+{{ s.retard }}j</span>
-						<span class="np-cm">{{ s.conducteur_nom || '—' }}</span>
-					</button>
-				</div>
+				<table class="vtc-table">
+					<thead>
+						<tr>
+							<th>{{ __('Chantier') }}</th>
+							<th>{{ __('Client') }}</th>
+							<th>{{ __('Flux (pér.)') }}</th>
+							<th>{{ __('Marge') }}</th>
+							<th>{{ __('Pointé (pér.)') }}</th>
+							<th class="num">{{ __('Total projet') }}</th>
+							<th>{{ __('Facturation cumul') }}</th>
+							<th class="num">{{ __('Retard') }}</th>
+							<th>{{ __('Alertes') }}</th>
+						</tr>
+					</thead>
+					<tbody>
+						<ProjectRow v-for="p in decroches" :key="p.project" :p="p" :maxHours="maxHours" @open="store.openProject" @incidents="openIncidents([$event])" @docs="openDocs" />
+					</tbody>
+				</table>
 			</div>
 		</template>
 	</div>
@@ -406,6 +421,14 @@ export default {
 			});
 			return rows;
 		},
+		// Chantiers décrochés, filtrés par la même recherche que le tableau
+		// principal (chantier / client / conducteur).
+		decroches() {
+			const list = (this.data && this.data.sans_pointage) || [];
+			const q = this.search.trim().toLowerCase();
+			if (!q) return list;
+			return list.filter((p) => (p.project + " " + p.client + " " + (p.conducteur_nom || "")).toLowerCase().includes(q));
+		},
 		totals() {
 			const r = this.filtered;
 			const sum = (fn) => r.reduce((s, p) => s + (fn(p) || 0), 0);
@@ -498,6 +521,7 @@ export default {
 			this.selectedCM = [];
 			this.store.filters.conducteurs = [];
 			this.store.filters.company = null;
+			this.store.filters.cost_center = null;
 			this.store.reload();
 		},
 		card(key, label, value, sub, cur, prev, invert, tip) {
@@ -550,7 +574,7 @@ export default {
 		// Ouvre la liste filtrée exactement sur les documents du total (name IN),
 		// seul moyen de refléter le filtre conducteur (qui porte sur le projet).
 		openDecroches() {
-			const names = (this.data.sans_pointage || []).map((s) => s.project);
+			const names = this.decroches.map((s) => s.project);
 			this.openNameList("Project", names);
 		},
 		openNameList(dt, names) {
@@ -803,8 +827,9 @@ export default {
 .vtc-flux-tot .ft.dep { background: rgba(245,124,0,.16); color: #e65100; }
 .vtc-flux-tot .ft.fab { background: rgba(126,87,194,.16); color: #6a3fb0; }
 
-/* Sans pointage */
+/* Chantiers décrochés */
 .vtc-nopointage { margin-top: 16px; }
+.vtc-decroches-head { padding: 14px 16px 10px; margin-bottom: 0; flex-wrap: wrap; }
 .vtc-badge-count { background: #f57c00; color: #fff; border-radius: 999px; padding: 1px 8px; font-size: 11px; }
 .vtc-decroches-link { margin-left: auto; border: 1px solid var(--border-color, #e2e6ea); background: var(--card-bg, #fff); color: var(--blue-600, #1565c0); border-radius: 8px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; text-transform: none; }
 .vtc-decroches-link:hover { border-color: var(--blue-400, #64b5f6); }

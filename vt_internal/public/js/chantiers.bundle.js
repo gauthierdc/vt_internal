@@ -24,6 +24,7 @@ function readUrlFilters() {
 	if (q.get("end")) f.end_date = q.get("end");
 	if (q.get("company")) f.company = q.get("company");
 	if (q.get("cm")) f.conducteurs = q.get("cm").split(",").filter(Boolean);
+	if (q.get("cc")) f.cost_center = q.get("cc");
 	return f;
 }
 
@@ -42,6 +43,7 @@ class ChantiersView {
 				end_date: frappe.datetime.get_today(),
 				company: null,
 				conducteurs: [],
+				cost_center: null,
 				// Écrase les valeurs par défaut avec celles de l'URL si présentes.
 				...readUrlFilters(),
 			},
@@ -87,6 +89,7 @@ class ChantiersView {
 		if (f.end_date) q.set("end", f.end_date);
 		if (f.company) q.set("company", f.company);
 		if (f.conducteurs && f.conducteurs.length) q.set("cm", f.conducteurs.join(","));
+		if (f.cost_center) q.set("cc", f.cost_center);
 		const qs = q.toString();
 		const url = window.location.pathname + (qs ? "?" + qs : "");
 		window.history.replaceState(window.history.state, "", url);
@@ -107,6 +110,7 @@ class ChantiersView {
 				end_date: f.end_date,
 				company: f.company || undefined,
 				conducteurs: f.conducteurs && f.conducteurs.length ? JSON.stringify(f.conducteurs) : undefined,
+				cost_center: f.cost_center || undefined,
 			},
 			callback: (r) => {
 				if (r && r.message) this.store.data = r.message;

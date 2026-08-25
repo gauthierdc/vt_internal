@@ -41,29 +41,43 @@ def _company_clause(company, alias="t"):
 	return "", []
 
 
-def _cm_clause(cm_list):
-	"""(fragment_sql, params) pour filtrer sur les conducteurs de travaux.
+def _project_clause(cm_list, cost_center=None):
+	"""(fragment_sql, params) pour filtrer sur des attributs du projet :
+	conducteurs de travaux et/ou centre de coût.
 
-	Suppose qu'un alias `p` (tabProject) est disponible dans la requête."""
+	Suppose qu'un alias `p` (tabProject) est disponible dans la requête (join
+	forcé par l'appelant via `_needs_project_join`)."""
+	sql, params = "", []
 	if cm_list:
 		ph = ",".join(["%s"] * len(cm_list))
-		return f" AND p.custom_construction_manager IN ({ph})", list(cm_list)
-	return "", []
+		sql += f" AND p.custom_construction_manager IN ({ph})"
+		params += list(cm_list)
+	if cost_center:
+		sql += " AND p.cost_center = %s"
+		params.append(cost_center)
+	return sql, params
 
 
-def _scalar_kpis(start_date, end_date, company, cm_list):
+def _needs_project_join(cm_list, cost_center=None):
+	"""Le filtre projet (conducteur / centre de coût) impose-t-il de joindre
+	`tabProject` dans les requêtes qui ne l'ont pas déjà ?"""
+	return bool(cm_list or cost_center)
+
+
+def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None):
 	"""KPIs scalaires pour une période — réutilisé pour la période courante ET
 	la période précédente (comparaison). Ne dépend pas de la boucle projets.
 
-	Si des conducteurs sont sélectionnés, on joint systématiquement `tabProject`
-	et on restreint aux chantiers de ces conducteurs (les heures hors chantier
-	disparaissent alors naturellement du périmètre)."""
+	Si des conducteurs et/ou un centre de coût sont sélectionnés, on joint
+	systématiquement `tabProject` et on restreint aux chantiers concernés (les
+	heures hors chantier disparaissent alors naturellement du périmètre)."""
 
 	comp_t, comp_pt = _company_clause(company, "t")
 	comp_si, comp_psi = _company_clause(company, "si")
-	cm_sql, cm_p = _cm_clause(cm_list)
+	cm_sql, cm_p = _project_clause(cm_list, cost_center)
+	proj_join = _needs_project_join(cm_list, cost_center)
 	# Jointure projet nécessaire pour les requêtes timesheet qui ne l'ont pas.
-	cm_join = " JOIN `tabProject` p ON p.name = d.project" if cm_list else ""
+	cm_join = " JOIN `tabProject` p ON p.name = d.project" if proj_join else ""
 	excl = ",".join(["%s"] * len(EXCLUDED_ACTIVITIES))
 
 	# Heures réalisées (validées) et non validées (brouillon), hors Fab/Livraison
@@ -155,7 +169,7 @@ def _scalar_kpis(start_date, end_date, company, cm_list):
 	# Montant commandé en commandes fournisseur sur la période (lignes liées à un projet)
 	comp_po = " AND po.company = %s" if company else ""
 	comp_po_p = [company] if company else []
-	po_join = " JOIN `tabProject` p ON p.name = poi.project" if cm_list else ""
+	po_join = " JOIN `tabProject` p ON p.name = poi.project" if proj_join else ""
 	po = frappe.db.sql(
 		f"""
 		SELECT SUM(poi.amount) AS montant
@@ -172,7 +186,7 @@ def _scalar_kpis(start_date, end_date, company, cm_list):
 	# Dépenses sur la période (notes de frais rattachées à un chantier)
 	comp_exp = " AND e.company = %s" if company else ""
 	comp_exp_p = [company] if company else []
-	exp_join = " JOIN `tabProject` p ON p.name = e.project" if cm_list else ""
+	exp_join = " JOIN `tabProject` p ON p.name = e.project" if proj_join else ""
 	exp = frappe.db.sql(
 		f"""
 		SELECT SUM(e.net_amount) AS montant
@@ -188,7 +202,7 @@ def _scalar_kpis(start_date, end_date, company, cm_list):
 	# Fabrication VT créée sur la période (hors annulées)
 	comp_fab = " AND f.company = %s" if company else ""
 	comp_fab_p = [company] if company else []
-	fab_join = " JOIN `tabProject` p ON p.name = f.project" if cm_list else ""
+	fab_join = " JOIN `tabProject` p ON p.name = f.project" if proj_join else ""
 	fab = frappe.db.sql(
 		f"""
 		SELECT SUM(f.manufacturing_costs) AS montant
@@ -219,29 +233,32 @@ def _scalar_kpis(start_date, end_date, company, cm_list):
 
 
 @frappe.whitelist()
-def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None):
+def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None, cost_center=None):
 	"""Point d'entrée principal de la vue Chantiers.
 
 	Renvoie période, KPIs (+ comparaison période précédente), lignes projet
 	enrichies, chantiers sans pointage, répartitions (activité, conducteur) et
-	séries hebdomadaires. `conducteurs` = liste de User (multi-sélection)."""
+	séries hebdomadaires. `conducteurs` = liste de User (multi-sélection).
+	`cost_center` = centre de coût (mono-sélection, porté par le projet)."""
 
 	end_date = end_date or frappe.utils.nowdate()
 	start_date = start_date or frappe.utils.add_to_date(end_date, days=-7)
 	cm_list = _parse_list(conducteurs)
+	cost_center = cost_center or None
 
 	# Période précédente de même longueur, juste avant.
 	length = frappe.utils.date_diff(end_date, start_date)
 	prev_end = frappe.utils.add_to_date(start_date, days=-1)
 	prev_start = frappe.utils.add_to_date(prev_end, days=-length)
 
-	kpis = _scalar_kpis(start_date, end_date, company, cm_list)
-	kpis_prev = _scalar_kpis(prev_start, prev_end, company, cm_list)
+	kpis = _scalar_kpis(start_date, end_date, company, cm_list, cost_center)
+	kpis_prev = _scalar_kpis(prev_start, prev_end, company, cm_list, cost_center)
 
 	comp_t, comp_pt = _company_clause(company, "t")
 	comp_si, comp_psi = _company_clause(company, "si")
-	cm_sql, cm_p = _cm_clause(cm_list)
-	cm_join = " JOIN `tabProject` p ON p.name = d.project" if cm_list else ""
+	cm_sql, cm_p = _project_clause(cm_list, cost_center)
+	proj_join = _needs_project_join(cm_list, cost_center)
+	cm_join = " JOIN `tabProject` p ON p.name = d.project" if proj_join else ""
 	excl = ",".join(["%s"] * len(EXCLUDED_ACTIVITIES))
 
 	# --- Heures par projet sur la période (validées + brouillon) ---------------
@@ -267,7 +284,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	# chantier dans la période (même sans pointage).
 	comp_po = " AND po.company = %s" if company else ""
 	comp_po_p = [company] if company else []
-	po_cm_join = " JOIN `tabProject` p ON p.name = poi.project" if cm_list else ""
+	po_cm_join = " JOIN `tabProject` p ON p.name = poi.project" if proj_join else ""
 	po_rows = frappe.db.sql(
 		f"""
 		SELECT poi.project AS project, SUM(poi.amount) AS montant
@@ -286,7 +303,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	# --- Dépenses par projet sur la période -----------------------------------
 	comp_exp = " AND e.company = %s" if company else ""
 	comp_exp_p = [company] if company else []
-	exp_cm_join = " JOIN `tabProject` p ON p.name = e.project" if cm_list else ""
+	exp_cm_join = " JOIN `tabProject` p ON p.name = e.project" if proj_join else ""
 	exp_rows = frappe.db.sql(
 		f"""
 		SELECT e.project AS project, SUM(e.net_amount) AS montant
@@ -304,7 +321,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	# --- Fabrication VT par projet sur la période -----------------------------
 	comp_fab = " AND f.company = %s" if company else ""
 	comp_fab_p = [company] if company else []
-	fab_cm_join = " JOIN `tabProject` p ON p.name = f.project" if cm_list else ""
+	fab_cm_join = " JOIN `tabProject` p ON p.name = f.project" if proj_join else ""
 	fab_rows = frappe.db.sql(
 		f"""
 		SELECT f.project AS project, SUM(f.manufacturing_costs) AS montant
@@ -320,7 +337,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	fab_map = {r.project: round(r.montant or 0) for r in fab_rows}
 
 	# --- CA facturé par projet sur la période ---------------------------------
-	si_cm_join = " JOIN `tabProject` p ON p.name = si.project" if cm_list else ""
+	si_cm_join = " JOIN `tabProject` p ON p.name = si.project" if proj_join else ""
 	ca_period_rows = frappe.db.sql(
 		f"""
 		SELECT si.project AS project, SUM(si.total) AS ca
@@ -338,10 +355,49 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 
 	# Chantiers de la période : il s'est passé QUELQUE CHOSE dessus, c.-à-d.
 	# pointage OU facturation OU commande fournisseur OU dépense OU fabrication.
-	project_names = list(dict.fromkeys(
+	period_names = list(dict.fromkeys(
 		[r.project for r in rows]
 		+ list(ca_map.keys()) + list(po_map.keys()) + list(exp_map.keys()) + list(fab_map.keys())
 	))
+
+	# --- Chantiers "décrochés" (détectés EN AMONT pour être enrichis exactement
+	# comme les chantiers de la période) ---------------------------------------
+	# Chantiers actifs pointés la période PRÉCÉDENTE mais sur lesquels plus aucune
+	# heure n'a été pointée pendant la période courante. C'est le signal
+	# actionnable ("on a arrêté de pointer dessus"), et non la liste de tous les
+	# projets ouverts (bien trop nombreuse pour être pertinente).
+	prev_pointed = frappe.db.sql(
+		f"""
+		SELECT DISTINCT d.project
+		FROM `tabTimesheet` t
+		JOIN `tabTimesheet Detail` d ON d.parent = t.name{cm_join}
+		WHERE t.docstatus IN (0, 1)
+		  AND d.project IS NOT NULL AND d.project != ''
+		  AND t.end_date BETWEEN %s AND %s{comp_t}{cm_sql}
+		""",
+		tuple([prev_start, prev_end, *comp_pt, *cm_p]),
+		pluck="project",
+	)
+	period_set = set(period_names)
+	candidates = [pr for pr in prev_pointed if pr not in period_set]
+	decroche_names = []
+	if candidates:
+		ph = ",".join(["%s"] * len(candidates))
+		decroche_names = frappe.db.sql(
+			f"""
+			SELECT p.name
+			FROM `tabProject` p
+			WHERE p.name IN ({ph})
+			  AND p.status NOT IN ('Completed', 'Cancelled')
+			  AND p.custom_estimated_labor_hours > 1
+			ORDER BY p.expected_end_date ASC
+			""",
+			tuple(candidates),
+			pluck="name",
+		)
+
+	# Ensemble complet enrichi en batch = chantiers de la période + décrochés.
+	project_names = list(dict.fromkeys(period_names + decroche_names))
 
 	# --- Batchs (une requête pour tous les projets listés) ---------------------
 	ca_period_map = ca_map  # déjà calculé ci-dessus (sert aussi à l'inclusion)
@@ -475,7 +531,10 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 			actual_map[r.project] = r.h or 0
 
 	# --- Construction des lignes projet ---------------------------------------
-	projects = []
+	# On construit TOUTES les lignes (période + décrochés) dans un dict, puis on
+	# scinde : les décrochés ont ainsi exactement la même forme que les chantiers
+	# de la période (recherche, colonnes, drawer identiques côté front).
+	rows_by_name = {}
 	cm_users = set()
 	for name in project_names:
 		p = meta_map.get(name)
@@ -522,7 +581,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		if p.custom_project_manager:
 			cm_users.add(p.custom_project_manager)
 
-		projects.append({
+		rows_by_name[name] = {
 			"project": name,
 			"client": p.customer or "",
 			"status": p.status,
@@ -553,48 +612,12 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 			"nb_receptions": len(reception_map.get(name, [])),
 			"nb_incidents": len(incidents),
 			"nb_incidents_ouverts": sum(1 for i in incidents if i.get("status") not in ("Closed", "Resolved", "Fermé")),
-		})
+		}
 
-	# --- Chantiers "décrochés" -------------------------------------------------
-	# Chantiers actifs qui étaient pointés la période PRÉCÉDENTE mais sur lesquels
-	# plus aucune heure n'a été pointée pendant la période courante. C'est le
-	# signal actionnable ("on a arrêté de pointer dessus"), et non la liste de
-	# tous les projets ouverts (bien trop nombreuse pour être pertinente).
-	prev_pointed = frappe.db.sql(
-		f"""
-		SELECT DISTINCT d.project
-		FROM `tabTimesheet` t
-		JOIN `tabTimesheet Detail` d ON d.parent = t.name{cm_join}
-		WHERE t.docstatus IN (0, 1)
-		  AND d.project IS NOT NULL AND d.project != ''
-		  AND t.end_date BETWEEN %s AND %s{comp_t}{cm_sql}
-		""",
-		tuple([prev_start, prev_end, *comp_pt, *cm_p]),
-		pluck="project",
-	)
-	current_set = set(project_names)
-	candidates = [pr for pr in prev_pointed if pr not in current_set]
-	sans_pointage = []
-	if candidates:
-		ph = ",".join(["%s"] * len(candidates))
-		sans_pointage = frappe.db.sql(
-			f"""
-			SELECT p.name AS project, p.customer, p.status, p.project_type,
-			       p.expected_end_date, p.custom_construction_manager AS conducteur
-			FROM `tabProject` p
-			WHERE p.name IN ({ph})
-			  AND p.status NOT IN ('Completed', 'Cancelled')
-			  AND p.custom_estimated_labor_hours > 1
-			ORDER BY p.expected_end_date ASC
-			""",
-			tuple(candidates),
-			as_dict=True,
-		)
-	for s in sans_pointage:
-		if s.conducteur:
-			cm_users.add(s.conducteur)
-		r = frappe.utils.date_diff(frappe.utils.nowdate(), s.expected_end_date) if s.expected_end_date else 0
-		s["retard"] = r if r > 0 else 0
+	# Scission : chantiers de la période vs chantiers décrochés. Les deux listes
+	# partagent la même forme de ligne (construite ci-dessus).
+	projects = [rows_by_name[n] for n in period_names if n in rows_by_name]
+	sans_pointage = [rows_by_name[n] for n in decroche_names if n in rows_by_name]
 
 	# --- Heures hors chantier par activité (vide si filtre conducteur) --------
 	activity = frappe.db.sql(
@@ -691,11 +714,10 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	def resolve(u):
 		return user_names.get(u, u) if u else ""
 
-	for p in projects:
+	# projects et sans_pointage référencent les mêmes dicts que rows_by_name.
+	for p in rows_by_name.values():
 		p["conducteur_nom"] = resolve(p["conducteur"])
 		p["responsable_nom"] = resolve(p["responsable"])
-	for s in sans_pointage:
-		s["conducteur_nom"] = resolve(s.get("conducteur"))
 	for c in conducteurs_rows:
 		c["conducteur_nom"] = resolve(c["conducteur"]) if c["conducteur"] != "—" else "Sans conducteur"
 
@@ -712,6 +734,18 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		as_dict=True,
 	)
 	meta_companies = frappe.get_all("Company", pluck="name", order_by="name")
+
+	# Centres de coût réellement utilisés par des chantiers (Projets) — évite de
+	# proposer les centres de coût techniques/groupes jamais rattachés.
+	meta_cost_centers = frappe.db.sql(
+		"""
+		SELECT DISTINCT p.cost_center AS value, p.cost_center AS label
+		FROM `tabProject` p
+		WHERE p.cost_center IS NOT NULL AND p.cost_center != ''
+		ORDER BY label
+		""",
+		as_dict=True,
+	)
 
 	# --- Noms exacts des documents composant chaque KPI ------------------------
 	# Le filtre "conducteur" porte sur le Projet, pas sur ces documents : le seul
@@ -731,7 +765,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		""",
 		[start_date, end_date, *comp_psi, *cm_p],
 	)
-	po_join2 = " JOIN `tabProject` p ON p.name = poi.project" if cm_list else ""
+	po_join2 = " JOIN `tabProject` p ON p.name = poi.project" if proj_join else ""
 	po_names = _names(
 		f"""
 		SELECT DISTINCT po.name FROM `tabPurchase Order Item` poi
@@ -741,7 +775,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		""",
 		[start_date, end_date, *comp_po_p, *cm_p],
 	)
-	exp_join2 = " JOIN `tabProject` p ON p.name = e.project" if cm_list else ""
+	exp_join2 = " JOIN `tabProject` p ON p.name = e.project" if proj_join else ""
 	exp_names = _names(
 		f"""
 		SELECT e.name FROM `tabExpense` e{exp_join2}
@@ -750,7 +784,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		""",
 		[start_date, end_date, *comp_exp_p, *cm_p],
 	)
-	fab_join2 = " JOIN `tabProject` p ON p.name = f.project" if cm_list else ""
+	fab_join2 = " JOIN `tabProject` p ON p.name = f.project" if proj_join else ""
 	fab_names = _names(
 		f"""
 		SELECT f.name FROM `tabFabrication VT` f{fab_join2}
@@ -759,7 +793,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		""",
 		[start_date, end_date, *comp_fab_p, *cm_p],
 	)
-	ts_join2 = " JOIN `tabProject` p ON p.name = d.project" if cm_list else ""
+	ts_join2 = " JOIN `tabProject` p ON p.name = d.project" if proj_join else ""
 	ts_draft_names = _names(
 		f"""
 		SELECT DISTINCT t.name FROM `tabTimesheet` t
@@ -779,7 +813,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 			"prev_end": str(prev_end),
 			"days": length + 1,
 		},
-		"meta": {"conducteurs": meta_conducteurs, "companies": meta_companies},
+		"meta": {"conducteurs": meta_conducteurs, "companies": meta_companies, "cost_centers": meta_cost_centers},
 		"doc_names": {
 			"ca": inv_names,
 			"po": po_names,
