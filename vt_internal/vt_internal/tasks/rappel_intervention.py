@@ -18,6 +18,8 @@ import frappe
 from frappe.core.doctype.sms_settings.sms_settings import send_sms
 from frappe.utils import add_days, formatdate, get_datetime, getdate, today
 
+from vt_internal.vt_internal.utils.phone import is_french_landline
+
 
 def rappel_chantier():
     """Rappel pour les chantiers (événements liés à une Fiche de travail)."""
@@ -86,7 +88,7 @@ def _envoyer_rappels(
             doctype, ref_name, ["phone", email_field, "cost_center", "company"]
         )
         # SMS seulement si le numéro n'est pas un fixe 04 (AllMySMS le refuse).
-        sms_possible = bool(phone) and not _is_french_landline(phone)
+        sms_possible = bool(phone) and not is_french_landline(phone)
         # Sans mobile ni e-mail, impossible de prévenir : on saute (un fixe
         # sans e-mail n'est pas une erreur — cas attendu, pas un bug).
         if not sms_possible and not email:
@@ -144,23 +146,6 @@ def _envoyer_rappels(
                 "content": f"<u><b>{canal}</b></u> : rappel J-1 ({horaire}).",
             }
         ).insert(ignore_permissions=True)
-
-
-def _is_french_landline(phone):
-    """True si le numéro est un fixe français (préfixe 04).
-
-    AllMySMS refuse les fixes (HTTP 400) ; on ne tente pas le SMS.
-    On normalise d'abord (espaces, points, tirets) et on ramène +334 /
-    00334 au format national 04 — même cas, même exclusion.
-    """
-    n = str(phone or "").replace(" ", "").replace(".", "").replace("-", "")
-    if n.startswith("+33"):
-        rest = n[3:]
-        n = rest if rest.startswith("0") else "0" + rest
-    elif n.startswith("0033"):
-        rest = n[4:]
-        n = rest if rest.startswith("0") else "0" + rest
-    return n.startswith("04")
 
 
 def _corps_email(cost_center, societe, titre, corps):

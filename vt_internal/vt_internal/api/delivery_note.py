@@ -9,6 +9,8 @@ Form et List du Bon de livraison).
 import frappe
 from frappe.core.doctype.sms_settings.sms_settings import send_sms
 
+from vt_internal.vt_internal.utils.phone import is_french_landline
+
 
 @frappe.whitelist()
 def sms_delivery_note(doc_name=None):
@@ -19,6 +21,12 @@ def sms_delivery_note(doc_name=None):
 
     if not doc.contact_mobile:
         frappe.throw("Aucun numéro de téléphone n’est renseigné pour ce bon de livraison.")
+
+    if is_french_landline(doc.contact_mobile):
+        frappe.throw(
+            "Le numéro renseigné ressemble à un fixe français (04). "
+            "AllMySMS refusera l’envoi — utilisez un mobile 06 ou 07."
+        )
 
     # Récupération du template SMS depuis la société
     sms_template = frappe.db.get_value("Company", doc.company, "custom_sms_commande_prête")
