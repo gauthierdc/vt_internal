@@ -7,6 +7,8 @@ Source de vérité : ces fichiers (versionnés). Les records DB ont été suppri
 
 import frappe
 
+from vt_internal.vt_internal.utils.phone import is_french_landline
+
 @frappe.whitelist()
 def create_production():
     # Converti depuis le Server Script API « create_production » (/api/method/create_production).
@@ -214,9 +216,28 @@ def update_manufacturing_status_in_order(doc=None):
                 delivery_note.insert()
                 delivery_note.submit()
             if doc.custom_auto_notify_delivery_ready_sms:
-                notification = frappe.get_doc('Notification', 'Commande prête sms')
-                message = frappe.render_template(notification.message, {"doc": doc})
-                frappe.call("frappe.core.doctype.sms_settings.sms_settings.send_sms", receiver_list=[doc.contact_mobile], msg=message)
+                # AllMySMS refuse les fixes 04 (HTTP 400) : on saute le SMS, le
+                # reste du flux (BL, mails, statut fiche) continue.
+                if is_french_landline(doc.contact_mobile):
+                    frappe.get_doc(
+                        {
+                            "doctype": "Comment",
+                            "comment_type": "Comment",
+                            "comment_email": frappe.session.user,
+                            "reference_doctype": doc.doctype,
+                            "reference_name": doc.name,
+                            "comment_by": frappe.session.user_fullname,
+                            "content": (
+                                f"<u><b>SMS commande prête non envoyé</b></u> : "
+                                f"le numéro {doc.contact_mobile} est un fixe 04 "
+                                f"(AllMySMS le refuse)."
+                            ),
+                        }
+                    ).insert(ignore_permissions=True)
+                else:
+                    notification = frappe.get_doc('Notification', 'Commande prête sms')
+                    message = frappe.render_template(notification.message, {"doc": doc})
+                    frappe.call("frappe.core.doctype.sms_settings.sms_settings.send_sms", receiver_list=[doc.contact_mobile], msg=message)
             if len(cts) > 0:
                 if frappe.db.exists("Event",{"project": ["=",doc.project]}):
                     fiche_de_travail_status = "À faire"

@@ -3,8 +3,10 @@
 Chaque soir, parcourt les événements (Event) du lendemain rattachés soit à une
 Fiche de travail (chantier), soit à une Visite Technique. Pour chaque document,
 on prévient le client de notre passage du lendemain :
-  - par SMS si un numéro de téléphone est renseigné ;
+  - par SMS si un numéro mobile est renseigné ;
   - sinon par e-mail (HTML) si une adresse est renseignée.
+Les numéros fixes commençant par 04 (AllMySMS les refuse, HTTP 400) sont
+traités comme s'il n'y avait pas de téléphone.
 Si plusieurs événements portent sur le même document, on retient l'heure de
 début la plus tôt.
 
@@ -15,6 +17,8 @@ Source de vérité : ce fichier (versionné).
 import frappe
 from frappe.core.doctype.sms_settings.sms_settings import send_sms
 from frappe.utils import add_days, formatdate, get_datetime, getdate, today
+
+from vt_internal.vt_internal.utils.phone import is_french_landline
 
 
 def rappel_chantier():
@@ -83,8 +87,11 @@ def _envoyer_rappels(
         phone, email, cost_center, company = frappe.db.get_value(
             doctype, ref_name, ["phone", email_field, "cost_center", "company"]
         )
-        # Sans téléphone ni e-mail, impossible de prévenir : on saute.
-        if not phone and not email:
+        # SMS seulement si le numéro n'est pas un fixe 04 (AllMySMS le refuse).
+        sms_possible = bool(phone) and not is_french_landline(phone)
+        # Sans mobile ni e-mail, impossible de prévenir : on saute (un fixe
+        # sans e-mail n'est pas une erreur — cas attendu, pas un bug).
+        if not sms_possible and not email:
             continue
 
         # Nom de la société affiché dans le message. Même règle que la notification
@@ -98,9 +105,9 @@ def _envoyer_rappels(
         else:
             horaire = f"à partir de {debut.strftime('%Hh%M')}"
 
-        # Canal : SMS si un numéro est renseigné, sinon repli sur l'e-mail.
+        # Canal : SMS si un mobile est renseigné, sinon repli sur l'e-mail.
         try:
-            if phone:
+            if sms_possible:
                 msg = modele_sms.format(horaire=horaire, societe=societe)
                 send_sms(receiver_list=[phone], msg=msg)
                 canal = f"SMS de rappel envoyé au {phone}"
@@ -120,7 +127,7 @@ def _envoyer_rappels(
                 )
                 canal = f"E-mail de rappel envoyé à {email}"
         except Exception as e:
-            destinataire = phone or email
+            destinataire = phone if sms_possible else email
             frappe.log_error(
                 f"Échec de l'envoi du rappel pour {doctype} {ref_name} ({destinataire}) : {e}",
                 "Rappel intervention J-1",
