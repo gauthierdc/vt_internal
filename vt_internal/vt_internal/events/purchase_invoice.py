@@ -22,13 +22,6 @@ def validate(doc, method=None):
         if credit_to:
             doc.credit_to = credit_to
 
-    # Puisque on arrive pas à récuppérer la date d'échéance on fait ce truc bizarre
-    # On l'écrase si elle est égale à la bill_date (ça veut dire qu'on beu)
-    if doc.bill_date == doc.due_date and doc.pending_purchase_invoice:
-        due_date = frappe.db.get_value('Pending Purchase Invoice', doc.pending_purchase_invoice, "due_date")
-        if due_date:
-            doc.due_date = due_date
-
 
 def after_insert(doc, method=None):
     # --- depuis Server Script « À créditer » (After Insert) ---
@@ -44,10 +37,5 @@ def after_insert(doc, method=None):
         )
         if credit_to:
             doc.credit_to = credit_to
-
-    if doc.pending_purchase_invoice:
-        due_date = frappe.db.get_value('Pending Purchase Invoice', doc.pending_purchase_invoice, "due_date")
-        if due_date:
-            doc.due_date = due_date
 
     doc.save()
