@@ -2,7 +2,8 @@
 
 Standalone (no bench / Frappe site): they reproduce the production
 AttributeError when Purchase Invoice has no ``pending_purchase_invoice``
-field in meta.
+field in meta. The OCR due-date copy path is gone; hooks must still
+survive that missing attribute.
 """
 
 from __future__ import annotations
@@ -27,9 +28,6 @@ class _MissingAttrDoc:
 
 	def __getattr__(self, name):
 		raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
-
-	def get(self, key, default=None):
-		return self.__dict__.get(key, default)
 
 	def save(self):
 		self.saved = True
@@ -56,8 +54,8 @@ class TestPurchaseInvoiceEvents(unittest.TestCase):
 		self.assertTrue(doc.saved)
 		self.assertEqual(doc.due_date, "2026-10-01")
 
-	def test_validate_without_pending_field_when_dates_match(self):
-		"""validate also read the field when bill_date == due_date."""
+	def test_validate_without_pending_field(self):
+		"""validate must not touch pending_purchase_invoice."""
 		doc = _MissingAttrDoc(
 			custom_mode_of_paiement=None,
 			bill_date="2026-09-01",
@@ -65,40 +63,6 @@ class TestPurchaseInvoiceEvents(unittest.TestCase):
 		)
 		validate(doc)
 		self.assertEqual(doc.due_date, "2026-09-01")
-
-	def test_after_insert_copies_due_date_when_pending_is_set(self):
-		doc = _MissingAttrDoc(
-			custom_mode_of_paiement=None,
-			pending_purchase_invoice="PPI-0001",
-			due_date="2026-09-01",
-		)
-		frappe = sys.modules["frappe"]
-		frappe.db.get_value.return_value = "2026-10-15"
-		after_insert(doc)
-		self.assertEqual(doc.due_date, "2026-10-15")
-		frappe.db.get_value.assert_called_with("Pending Purchase Invoice", "PPI-0001", "due_date")
-
-	def test_validate_copies_due_date_only_when_dates_match(self):
-		frappe = sys.modules["frappe"]
-		frappe.db.get_value.return_value = "2026-10-15"
-
-		unchanged = _MissingAttrDoc(
-			custom_mode_of_paiement=None,
-			pending_purchase_invoice="PPI-0001",
-			bill_date="2026-09-01",
-			due_date="2026-09-15",
-		)
-		validate(unchanged)
-		self.assertEqual(unchanged.due_date, "2026-09-15")
-
-		matched = _MissingAttrDoc(
-			custom_mode_of_paiement=None,
-			pending_purchase_invoice="PPI-0001",
-			bill_date="2026-09-01",
-			due_date="2026-09-01",
-		)
-		validate(matched)
-		self.assertEqual(matched.due_date, "2026-10-15")
 
 
 if __name__ == "__main__":
