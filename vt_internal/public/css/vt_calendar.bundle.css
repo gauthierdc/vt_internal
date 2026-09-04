@@ -11,3 +11,223 @@
 .footnote-area:has(.btn-weekend) {
 	display: none !important;
 }
+
+/* Sidebar multi-employés (vue Calendrier Event) */
+.vt-cal-layout {
+	display: flex;
+	align-items: stretch;
+	min-height: 0;
+	gap: 0;
+}
+
+.vt-cal-layout > .fc {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.vt-cal-employees {
+	flex: 0 0 252px;
+	width: 252px;
+	max-height: calc(100svh - 130px);
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	background: var(--fg-color, #fff);
+	border: 1px solid var(--border-color, #e2e6ea);
+	border-right: none;
+	border-radius: 8px 0 0 8px;
+	font-family: var(--font-stack, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+}
+
+.vt-cal-layout > .fc,
+.vt-cal-layout .fc {
+	border-radius: 0 8px 8px 0;
+}
+
+.vt-cal-employees__head {
+	flex: none;
+	border-bottom: 1px solid var(--border-color, #e2e6ea);
+}
+
+.vt-cal-employees__toggle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 10px 12px;
+	border: 0;
+	background: transparent;
+	color: var(--text-color, #1f272e);
+	cursor: pointer;
+	text-align: left;
+}
+
+.vt-cal-employees__toggle:hover {
+	background: var(--control-bg, #f4f5f6);
+}
+
+.vt-cal-employees__title {
+	font-size: 13px;
+	font-weight: 680;
+	letter-spacing: 0.02em;
+}
+
+.vt-cal-employees__count {
+	min-width: 1.4em;
+	padding: 1px 7px;
+	border-radius: 999px;
+	background: var(--control-bg, #eef1f3);
+	color: var(--text-muted, #6c7680);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.vt-cal-employees__count:empty {
+	display: none;
+}
+
+.vt-cal-employees__body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 8px 10px 12px;
+}
+
+.vt-cal-employees__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+	margin-bottom: 8px;
+}
+
+.vt-cal-employees__link {
+	border: 0;
+	padding: 0;
+	background: none;
+	color: var(--text-muted, #6c7680);
+	font-size: 12px;
+	font-weight: 560;
+	cursor: pointer;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.vt-cal-employees__link:hover {
+	color: var(--text-color, #1f272e);
+}
+
+.vt-cal-employees__row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 4px;
+	border-radius: 8px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.vt-cal-employees__row:hover {
+	background: var(--control-bg, #f4f5f6);
+}
+
+.vt-cal-employees__cb {
+	flex: none;
+	margin: 0;
+	accent-color: #1e88e5;
+}
+
+.vt-cal-employees__swatch {
+	flex: none;
+	width: 12px;
+	height: 12px;
+	border-radius: 4px;
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.vt-cal-employees__name {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 13px;
+	line-height: 1.3;
+	color: var(--text-color, #1f272e);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.vt-cal-employees__badge {
+	flex: none;
+	color: var(--text-muted, #6c7680);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.vt-cal-employees__empty {
+	margin: 8px 2px;
+	font-size: 12.5px;
+	color: var(--text-muted, #6c7680);
+}
+
+.fc-event.vt-cal-hidden {
+	display: none !important;
+}
+
+/* Panneau replié : barre étroite, la grille reprend la largeur */
+.vt-cal-employees.is-collapsed {
+	flex-basis: 44px;
+	width: 44px;
+}
+
+.vt-cal-employees.is-collapsed .vt-cal-employees__body {
+	display: none;
+}
+
+.vt-cal-employees.is-collapsed .vt-cal-employees__title,
+.vt-cal-employees.is-collapsed .vt-cal-employees__count {
+	/* Titre vertical pour garder le libellé visible une fois replié */
+	writing-mode: vertical-rl;
+	transform: rotate(180deg);
+}
+
+.vt-cal-employees.is-collapsed .vt-cal-employees__toggle {
+	flex-direction: column;
+	align-items: center;
+	height: 100%;
+	padding: 12px 6px;
+}
+
+@media (max-width: 768px) {
+	.vt-cal-layout {
+		flex-direction: column;
+	}
+
+	.vt-cal-employees {
+		flex-basis: auto;
+		width: 100%;
+		max-height: 220px;
+		border-right: 1px solid var(--border-color, #e2e6ea);
+		border-radius: 8px 8px 0 0;
+	}
+
+	.vt-cal-layout > .fc,
+	.vt-cal-layout .fc {
+		border-radius: 0 0 8px 8px;
+	}
+
+	.vt-cal-employees.is-collapsed {
+		width: 100%;
+		max-height: none;
+	}
+
+	.vt-cal-employees.is-collapsed .vt-cal-employees__title,
+	.vt-cal-employees.is-collapsed .vt-cal-employees__count {
+		writing-mode: horizontal-tb;
+		transform: none;
+	}
+
+	.vt-cal-employees.is-collapsed .vt-cal-employees__toggle {
+		flex-direction: row;
+		height: auto;
+		padding: 10px 12px;
+	}
+}

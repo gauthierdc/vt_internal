@@ -67,6 +67,7 @@ def get_events(
 	filter_condition = ""
 	if filters:
 		from frappe.desk.reportview import get_filters_cond
+
 		filter_condition = get_filters_cond("Event", filters, [], ignore_permissions=ignore_permissions)
 
 	# FIX: Ajouter les conditions User Permissions (le coeur de la correction)
@@ -76,6 +77,7 @@ def get_events(
 	if filter_condition and "`tabEvent Participants`" in filter_condition:
 		tables.append("`tabEvent Participants`")
 
+	# custom_employé est toujours sélectionné : le calendrier filtre par employé côté client.
 	events = frappe.db.sql(
 		"""
 		SELECT `tabEvent`.name,
@@ -91,7 +93,8 @@ def get_events(
 				`tabEvent`.event_type,
 				`tabEvent`.repeat_this_event,
 				`tabEvent`.rrule,
-				`tabEvent`.repeat_till
+				`tabEvent`.repeat_till,
+				`tabEvent`.`custom_employé`
 				{additional_fields}
 		FROM {tables}
 		WHERE (
