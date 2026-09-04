@@ -137,17 +137,21 @@ def _employee_details(employee_ids):
 	if not ids:
 		return {}
 	fields = ["name", "employee_name"]
-	if frappe.db.has_column("Employee", "custom_couleur"):
-		fields.append("custom_couleur")
-	details = {}
-	for row in frappe.get_list(
-		"Employee",
-		filters={"name": ["in", ids]},
-		fields=fields,
-		limit_page_length=500,
-	):
-		details[row.name] = row
-	return details
+	try:
+		if frappe.db.has_column("Employee", "custom_couleur"):
+			fields.append("custom_couleur")
+	except Exception:
+		pass
+	try:
+		rows = frappe.get_list(
+			"Employee",
+			filters={"name": ["in", ids]},
+			fields=fields,
+			limit_page_length=500,
+		)
+	except Exception:
+		return {}
+	return {row.name: row for row in rows}
 
 
 @frappe.whitelist()

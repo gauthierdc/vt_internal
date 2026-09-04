@@ -55,6 +55,7 @@ frappe.provide("frappe.vt_cal_employees");
 		employees: [],
 		userUnchecked: new Set(),
 		rangeKey: "",
+		applying: false,
 	};
 
 	function empKey(name) {
@@ -104,12 +105,18 @@ frappe.provide("frappe.vt_cal_employees");
 	}
 
 	function applyVisibility() {
+		if (state.applying) return;
 		const $root = state.cal && state.cal.$wrapper;
 		if (!$root || !$root.length) return;
 		const events = $root.find(".fc-event").toArray();
 		const marked = events.some((el) => el.dataset.vtEmployee);
 		if (!marked && state.cal.fullCalendar && typeof state.cal.fullCalendar.render === "function") {
-			state.cal.fullCalendar.render();
+			state.applying = true;
+			try {
+				state.cal.fullCalendar.render();
+			} finally {
+				state.applying = false;
+			}
 			return;
 		}
 		events.forEach((el) => {
