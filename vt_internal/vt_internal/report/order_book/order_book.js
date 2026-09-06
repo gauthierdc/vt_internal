@@ -53,6 +53,10 @@ frappe.query_reports["Order book"] = {
             const display = value ? value.replace(/\n/g, '<br>') : '<em style="color:#888">Cliquer pour modifier</em>';
             html = `<div class="editable-construction-status" data-name="${data.name}" style="cursor:pointer; min-height:20px;">${display}</div>`;
         }
+        // Server already built clickable supplier-name links; do not escape HTML.
+        if (column.fieldname === "purchase_orders") {
+            return value || "";
+        }
         return html;
     },
     onload: function(report) {
