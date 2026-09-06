@@ -6,17 +6,33 @@ Source de vérité : ce fichier (versionné). Les records DB ont été supprimé
 
 import frappe
 
+from vt_internal.vt_internal.utils.event_employees import (
+    DEFAULT_EVENT_COLOR,
+    absorb_legacy_employee,
+    dedupe_employee_rows,
+    get_event_employee_ids,
+    resolve_canonical_color,
+)
+
 
 def validate(doc, method=None):
     # --- depuis Server Script « Événement avant la sauvegarde » (Before Save) ---
-    color = None
+    # Table enfant = source de vérité. On absorbe encore custom_employé s'il
+    # arrive via un ancien client, sans le réécrire.
+    absorb_legacy_employee(doc)
+    dedupe_employee_rows(doc)
+
+    vehicle_color = None
     if doc.custom_vehicle:
-        color = frappe.db.get_value("Vehicle", doc.custom_vehicle, "custom_couleur")
-    elif doc.custom_employé:
-        color = frappe.db.get_value("Employee", doc.custom_employé, "custom_couleur")
-    else:
-        color = "#FFEE00"
-    doc.color = color
+        vehicle_color = frappe.db.get_value("Vehicle", doc.custom_vehicle, "custom_couleur")
+
+    employee_colors = []
+    for emp in get_event_employee_ids(doc):
+        employee_colors.append(frappe.db.get_value("Employee", emp, "custom_couleur"))
+
+    # Véhicule gagne pour Event.color (couleur « canonique » liste / fiche).
+    # Les blocs calendrier, eux, utilisent la couleur de chaque employé.
+    doc.color = resolve_canonical_color(vehicle_color, employee_colors) or DEFAULT_EVENT_COLOR
 
 
 def on_update(doc, method=None):

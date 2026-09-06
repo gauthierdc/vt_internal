@@ -15,7 +15,7 @@ frappe.views.calendar["Event"] = {
 		color: "color",
 		rrule: "rrule",
 		secondary_status: "status",
-		// Expose le Link Employee pour filtrer la vue (sidebar multi-employés).
+		// Employé de CET bloc (après split get_events : 1 item par personne).
 		custom_employé: "custom_employé",
 	},
 	secondary_status_color: {
@@ -62,6 +62,12 @@ frappe.provide("frappe.vt_cal_employees");
 		return name || NONE;
 	}
 
+	function eventName(ev) {
+		if (!ev) return "";
+		const xp = ev.extendedProps || {};
+		return xp.name || ev.name || "";
+	}
+
 	function eventEmployee(ev) {
 		if (!ev) return "";
 		const xp = ev.extendedProps || {};
@@ -102,6 +108,14 @@ frappe.provide("frappe.vt_cal_employees");
 		const emp = eventEmployee(info.event);
 		info.el.dataset.vtEmployee = empKey(emp);
 		info.el.classList.toggle("vt-cal-hidden", !isVisible(emp));
+		// Les ids d'instance (`EV::date::emp`) ne doivent pas devenir l'URL du doc.
+		const name = eventName(info.event);
+		if (name) {
+			const anchor = info.el.matches("a[href]") ? info.el : info.el.querySelector("a[href]");
+			if (anchor) {
+				anchor.setAttribute("href", "/app/event/" + encodeURIComponent(name));
+			}
+		}
 	}
 
 	function applyVisibility() {
@@ -366,6 +380,22 @@ frappe.provide("frappe.vt_cal_employees");
 			return Boolean(Calendar);
 		}
 		const proto = Calendar.prototype;
+
+		const origPrepare = proto.prepare_events;
+		if (typeof origPrepare === "function") {
+			proto.prepare_events = function (events) {
+				const prepared = origPrepare.call(this, events);
+				if (this.doctype !== "Event") return prepared;
+				return (prepared || []).map((d) => {
+					// field_map.id reste `name` (drag & drop / update_event).
+					// FullCalendar a besoin d'un id unique par bloc employé.
+					if (d.calendar_instance_id) {
+						d.id = d.calendar_instance_id;
+					}
+					return d;
+				});
+			};
+		}
 
 		const origSetup = proto.setup_options;
 		if (typeof origSetup === "function") {

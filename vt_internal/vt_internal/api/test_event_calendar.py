@@ -75,6 +75,23 @@ class TestBuildEmployeeRows(unittest.TestCase):
 		self.assertEqual(build_employee_rows([], {}), [])
 		self.assertEqual(build_employee_rows(None, None), [])
 
+	def test_split_instances_count_for_each_employee(self):
+		# Un Event Ahmed+Solène arrive déjà en 2 blocs (même name, employés distincts).
+		events = [
+			{"name": "EV-1", "custom_employé": "EMP-001", "color": "#111111"},
+			{"name": "EV-1", "custom_employé": "EMP-002", "color": "#222222"},
+		]
+		details = {
+			"EMP-001": {"employee_name": "Ahmed", "custom_couleur": "#111111"},
+			"EMP-002": {"employee_name": "Solène", "custom_couleur": "#222222"},
+		}
+		rows = build_employee_rows(events, details)
+		by_name = {r["name"]: r for r in rows}
+		self.assertEqual(by_name["EMP-001"]["event_count"], 1)
+		self.assertEqual(by_name["EMP-002"]["event_count"], 1)
+		self.assertEqual(by_name["EMP-001"]["employee_name"], "Ahmed")
+		self.assertEqual(by_name["EMP-002"]["employee_name"], "Solène")
+
 
 if __name__ == "__main__":
 	unittest.main()

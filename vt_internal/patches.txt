@@ -9,3 +9,4 @@ vt_internal.vt_internal.patches.drop_migrated_scripts
 vt_internal.vt_internal.patches.promote_custom_doctypes
 vt_internal.vt_internal.patches.drop_deprecated_doctypes
 vt_internal.vt_internal.patches.recompute_ft_labor_from_timesheets
+vt_internal.vt_internal.patches.add_event_employee_table

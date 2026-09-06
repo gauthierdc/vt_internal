@@ -138,6 +138,9 @@ doctype_calendar_js = {"Event": "public/js/event_calendar.js"}
 # before_uninstall = "vt_internal.uninstall.before_uninstall"
 # after_uninstall = "vt_internal.uninstall.after_uninstall"
 
+# after_migrate : Custom Field Event + copie de custom_employé (idempotent).
+after_migrate = ["vt_internal.vt_internal.setup.event_employees.after_migrate"]
+
 # Integration Setup
 # ------------------
 # To set up dependencies/integrations with other apps

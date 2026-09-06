@@ -88,14 +88,16 @@ UNASSIGNED_COLOR = "#FFEE00"
 
 
 def _event_employee_id(event):
+	# Après le split get_events : un item = un employé (custom_employé de l'instance).
 	return (event.get("custom_employé") or "").strip()
 
 
 def build_employee_rows(events, employee_details=None):
-	"""Agrège les Events en lignes sidebar : name, employee_name, color, event_count.
+	"""Agrège les blocs calendrier en lignes sidebar : name, employee_name, color, event_count.
 
 	`employee_details` : {employee_name_id: {employee_name, custom_couleur}}.
-	Les événements sans `custom_employé` sont regroupés sous une ligne « Sans employé ».
+	Un Event Ahmed+Solène arrive déjà en 2 items : il compte pour les deux.
+	Les événements sans employé sont regroupés sous « Sans employé ».
 	"""
 	employee_details = employee_details or {}
 	counts = {}
