@@ -66,3 +66,26 @@ frappe.after_ajax(() => {
 		sidebar.setup('V&T');
 	}, 100);
 });
+
+// Mobile : si Frappe a laissé html/body en overflow:hidden alors qu'aucun
+// overlay n'est ouvert, on rétablit le scroll (tout le Desk, pas seulement
+// le calendrier). vt_common installe le même garde-fou ; cet appel est
+// idempotent et sert si le bundle commun arrive plus tard.
+(function guardMobileDeskScroll() {
+	const tryInstall = () => {
+		const api = typeof frappe !== 'undefined' && frappe.vt && frappe.vt.desk_mobile_scroll;
+		if (!api || typeof api.installDeskMobileScrollGuard !== 'function') return false;
+		api.installDeskMobileScrollGuard({
+			doc: document,
+			pageProto: frappe.ui && frappe.ui.Page && frappe.ui.Page.prototype,
+			router: frappe.router,
+			getWidth: () => window.innerWidth,
+		});
+		return true;
+	};
+	if (tryInstall()) return;
+	const t = setInterval(() => {
+		if (tryInstall()) clearInterval(t);
+	}, 100);
+	setTimeout(() => clearInterval(t), 15000);
+})();

@@ -159,11 +159,8 @@
 }
 
 /*
- * CalendarView extends ListView, so Frappe still builds layout-side-section
- * (Assigned / Tags / Saved Filters). On reload — especially on phone — that
- * pane opens as an overlay, not the V&T workspace sidebar, and page.js sets
- * html { overflow-y: hidden }. Hide only the list sidebar; leave the
- * workspace hamburger / body-sidebar alone.
+ * Calendar-only: hide the ListView Assigned/Tags pane. Document overflow
+ * unlock is desk-wide (vt_forms.bundle.css + vt_desk_mobile_scroll.js).
  */
 body.vt-event-calendar-page .page-container .layout-side-section {
 	display: none !important;
@@ -198,7 +195,7 @@ body.vt-event-calendar-page .layout-main-section-wrapper {
 		right: 0;
 	}
 
-	/* Let the desk page scroll; do not trap inside a 100svh FullCalendar. */
+	/* Calendar grid: height:auto — do not keep a nested time-grid scroller. */
 	body.vt-event-calendar-page .page-container,
 	body.vt-event-calendar-page .layout-main,
 	body.vt-event-calendar-page .layout-main-section-wrapper,

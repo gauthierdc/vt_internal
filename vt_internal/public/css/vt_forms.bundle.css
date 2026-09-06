@@ -363,3 +363,22 @@
 	}
 	.vt-timer-widget__panel { width: auto; }
 }
+
+/*
+ * Desk-wide mobile: Frappe list overlay sets an inline
+ * html { overflow-y: hidden }. If that overlay / a modal is gone, drop the
+ * inline lock (`unset` beats the inline style, then the normal desk CSS
+ * applies). While the overlay is open, do not override — the overlay stays
+ * the scroll target.
+ */
+@media (max-width: 768px) {
+	html:not(:has(.overlay-sidebar.opened)):not(:has(.close-sidebar)):not(:has(.modal.show)):not(:has(.modal.in)):not(:has(body.modal-open)) {
+		overflow-y: unset !important;
+		overflow: unset !important;
+	}
+
+	body:not(.modal-open):not(:has(.overlay-sidebar.opened)):not(:has(.close-sidebar)):not(:has(.modal.show)):not(:has(.modal.in)) {
+		overflow: unset !important;
+		overflow-y: unset !important;
+	}
+}

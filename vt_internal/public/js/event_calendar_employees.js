@@ -1,6 +1,8 @@
 // Helpers purs du filtre Employés (calendrier Event).
 // Importés par les tests Node et attachés sur frappe.vt.calendar_employees.
 
+import { restoreDeskPageScroll } from "./vt_desk_mobile_scroll.js";
+
 const NONE = "__none__";
 const EMP_KEYS = ["custom_employé", "custom_employe", "custom_employee"];
 
@@ -260,19 +262,9 @@ export function hideEventCalendarListSidebar(root) {
 		if (el.classList) el.classList.add("no-list-sidebar");
 	});
 
-	let overflowRestored = false;
-	const html = root.documentElement || (root.querySelector && root.querySelector("html"));
-	if (html && html.style && html.style.overflowY === "hidden") {
-		html.style.overflowY = "";
-		overflowRestored = true;
-	}
-	if (root.body && root.body.style && (root.body.style.overflow === "hidden" || root.body.style.overflowY === "hidden")) {
-		root.body.style.overflow = "";
-		root.body.style.overflowY = "";
-		overflowRestored = true;
-	}
-
-	return { hidden: sections.length, overflowRestored };
+	// Overlay just closed: force-unlock even if a stale selector remains.
+	const { restored } = restoreDeskPageScroll(root, { force: true });
+	return { hidden: sections.length, overflowRestored: restored };
 }
 
 export function attachCalendarEmployeeHelpers(target) {
