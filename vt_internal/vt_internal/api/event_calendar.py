@@ -2,6 +2,9 @@
 # API du drawer d'événement (remplace le popover natif sur le calendrier Dokos).
 #
 #   - get_event_detail : détail enrichi (VT/FDT, adresse, téléphone) pour la modale
+#   - get_calendar_employees : employés distincts visibles sur [start, end]
+
+import json
 
 import frappe
 
@@ -77,3 +80,92 @@ def get_event_detail(name):
 		"address_display": address_display,
 		"phone": phone,
 	}
+
+
+UNASSIGNED_EMPLOYEE = ""
+UNASSIGNED_LABEL = "Sans employé"
+UNASSIGNED_COLOR = "#FFEE00"
+
+
+def _event_employee_id(event):
+	return (event.get("custom_employé") or "").strip()
+
+
+def build_employee_rows(events, employee_details=None):
+	"""Agrège les Events en lignes sidebar : name, employee_name, color, event_count.
+
+	`employee_details` : {employee_name_id: {employee_name, custom_couleur}}.
+	Les événements sans `custom_employé` sont regroupés sous une ligne « Sans employé ».
+	"""
+	employee_details = employee_details or {}
+	counts = {}
+	fallback_color = {}
+	for event in events or []:
+		emp = _event_employee_id(event)
+		counts[emp] = counts.get(emp, 0) + 1
+		if emp and emp not in fallback_color and event.get("color"):
+			fallback_color[emp] = event.get("color")
+
+	rows = []
+	for emp, count in counts.items():
+		if not emp:
+			rows.append(
+				{
+					"name": UNASSIGNED_EMPLOYEE,
+					"employee_name": UNASSIGNED_LABEL,
+					"color": UNASSIGNED_COLOR,
+					"event_count": count,
+				}
+			)
+			continue
+		detail = employee_details.get(emp) or {}
+		rows.append(
+			{
+				"name": emp,
+				"employee_name": detail.get("employee_name") or emp,
+				"color": detail.get("custom_couleur") or fallback_color.get(emp) or DEFAULT_COLOR,
+				"event_count": count,
+			}
+		)
+
+	rows.sort(key=lambda r: (not r["name"], (r["employee_name"] or "").casefold()))
+	return rows
+
+
+def _employee_details(employee_ids):
+	ids = [eid for eid in employee_ids if eid]
+	if not ids:
+		return {}
+	fields = ["name", "employee_name"]
+	try:
+		if frappe.db.has_column("Employee", "custom_couleur"):
+			fields.append("custom_couleur")
+	except Exception:
+		pass
+	try:
+		rows = frappe.get_list(
+			"Employee",
+			filters={"name": ["in", ids]},
+			fields=fields,
+			limit_page_length=500,
+		)
+	except Exception:
+		return {}
+	return {row.name: row for row in rows}
+
+
+@frappe.whitelist()
+def get_calendar_employees(start, end, filters=None):
+	"""Employés distincts ayant au moins un Event visible sur [start, end].
+
+	Réutilise `get_events` (permissions Public / Private / partages / User Permissions)
+	pour que la sidebar liste exactement les personnes présentes sur la vue calendrier.
+	"""
+	from vt_internal.vt_internal.overrides.event import get_events
+
+	if isinstance(filters, str):
+		filters = json.loads(filters)
+
+	events = get_events(start=start, end=end, filters=filters)
+	ids = {_event_employee_id(e) for e in events}
+	return build_employee_rows(events, _employee_details(ids))
