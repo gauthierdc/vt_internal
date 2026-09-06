@@ -2,10 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
 	asEmployeeRows,
+	applyEventCalendarPageClass,
+	calendarLayoutOptions,
+	CALENDAR_MOBILE_MAX_PX,
 	collectCalendarEvents,
+	DESKTOP_CALENDAR_HEIGHT,
 	employeeFromInstanceId,
 	employeesFromEvents,
+	EVENT_CALENDAR_PAGE_CLASS,
 	eventEmployee,
+	hideEventCalendarListSidebar,
+	isEventCalendarRoute,
+	isMobileCalendarViewport,
 	mergeEmployeeRows,
 	sanitizeCalendarFilters,
 	serializeCalendarDate,
@@ -165,4 +173,100 @@ test("stampPreparedEvent keeps custom_employé on the event and in extendedProps
 	assert.equal(stamped.extendedProps.custom_employé, "Elmedhi Chaoui");
 	assert.equal(stamped.extendedProps.name, "EV-1");
 	assert.equal(eventEmployee(stamped), "Elmedhi Chaoui");
+});
+
+test("isEventCalendarRoute accepts List/Event/Calendar only", () => {
+	assert.equal(isEventCalendarRoute(["List", "Event", "Calendar"]), true);
+	assert.equal(isEventCalendarRoute(["list", "event", "calendar", "default"]), true);
+	assert.equal(isEventCalendarRoute(["List", "Event", "List"]), false);
+	assert.equal(isEventCalendarRoute(["Form", "Event", "EV-1"]), false);
+	assert.equal(isEventCalendarRoute(["List", "Event"]), false);
+	assert.equal(isEventCalendarRoute(null), false);
+});
+
+test("calendarLayoutOptions uses auto height on phone and 100svh on desktop", () => {
+	assert.equal(isMobileCalendarViewport(375), true);
+	assert.equal(isMobileCalendarViewport(CALENDAR_MOBILE_MAX_PX), false);
+	assert.deepEqual(calendarLayoutOptions(390), { height: "auto", expandRows: false });
+	assert.deepEqual(calendarLayoutOptions(1280), {
+		height: DESKTOP_CALENDAR_HEIGHT,
+		expandRows: true,
+	});
+});
+
+test("applyEventCalendarPageClass toggles the desk body class", () => {
+	const classes = new Set();
+	const doc = {
+		body: {
+			classList: {
+				toggle(name, on) {
+					if (on) classes.add(name);
+					else classes.delete(name);
+				},
+				contains(name) {
+					return classes.has(name);
+				},
+			},
+		},
+	};
+	assert.equal(applyEventCalendarPageClass(doc, true), true);
+	assert.equal(classes.has(EVENT_CALENDAR_PAGE_CLASS), true);
+	assert.equal(applyEventCalendarPageClass(doc, false), false);
+	assert.equal(classes.has(EVENT_CALENDAR_PAGE_CLASS), false);
+});
+
+test("hideEventCalendarListSidebar closes list overlay and unlocks html scroll", () => {
+	const overlay = {
+		classList: {
+			opened: true,
+			remove(name) {
+				if (name === "opened") this.opened = false;
+			},
+		},
+	};
+	const closer = {
+		removed: false,
+		remove() {
+			this.removed = true;
+		},
+	};
+	const section = {
+		classList: {
+			opened: true,
+			remove(name) {
+				if (name === "opened") this.opened = false;
+			},
+		},
+		querySelector(sel) {
+			if (sel === ".overlay-sidebar") return overlay;
+			if (sel === ".close-sidebar") return closer;
+			return null;
+		},
+	};
+	const wrapper = {
+		classList: {
+			added: new Set(),
+			add(name) {
+				this.added.add(name);
+			},
+		},
+	};
+	const root = {
+		documentElement: { style: { overflowY: "hidden" } },
+		body: { style: { overflow: "hidden", overflowY: "hidden" } },
+		querySelectorAll(sel) {
+			if (sel === ".layout-side-section") return [section];
+			if (sel.includes("page-container")) return [wrapper];
+			return [];
+		},
+	};
+
+	const result = hideEventCalendarListSidebar(root);
+	assert.equal(result.hidden, 1);
+	assert.equal(result.overflowRestored, true);
+	assert.equal(section.classList.opened, false);
+	assert.equal(overlay.classList.opened, false);
+	assert.equal(closer.removed, true);
+	assert.equal(root.documentElement.style.overflowY, "");
+	assert.equal(wrapper.classList.added.has("no-list-sidebar"), true);
 });

@@ -190,6 +190,91 @@ export function stampPreparedEvent(d, { eventDocName, eventFormHref } = {}) {
 	return d;
 }
 
+export const EVENT_CALENDAR_PAGE_CLASS = "vt-event-calendar-page";
+export const CALENDAR_MOBILE_MAX_PX = 768;
+export const DESKTOP_CALENDAR_HEIGHT = "calc(100svh - 130px)";
+
+export function isEventCalendarRoute(route) {
+	if (!Array.isArray(route) || route.length < 3) return false;
+	return (
+		String(route[0]).toLowerCase() === "list" &&
+		String(route[1]).toLowerCase() === "event" &&
+		String(route[2]).toLowerCase() === "calendar"
+	);
+}
+
+export function isMobileCalendarViewport(width) {
+	const w = Number(width);
+	if (!Number.isFinite(w)) return false;
+	return w < CALENDAR_MOBILE_MAX_PX;
+}
+
+/**
+ * FullCalendar height that does not trap page scroll on phone.
+ * Desktop keeps a viewport-filling week grid; mobile lets the document scroll.
+ */
+export function calendarLayoutOptions(width) {
+	if (isMobileCalendarViewport(width)) {
+		return { height: "auto", expandRows: false };
+	}
+	return { height: DESKTOP_CALENDAR_HEIGHT, expandRows: true };
+}
+
+export function applyEventCalendarPageClass(doc, on) {
+	if (!doc || !doc.body || !doc.body.classList) return false;
+	doc.body.classList.toggle(EVENT_CALENDAR_PAGE_CLASS, Boolean(on));
+	return doc.body.classList.contains(EVENT_CALENDAR_PAGE_CLASS);
+}
+
+function asNodeList(root, selector) {
+	if (!root) return [];
+	if (typeof root.querySelectorAll === "function") {
+		try {
+			return Array.from(root.querySelectorAll(selector));
+		} catch (_e) {
+			return [];
+		}
+	}
+	return [];
+}
+
+/**
+ * Close Frappe's ListView sidebar (Assigned / Tags / Saved Filters), not the
+ * V&T workspace sidebar. On mobile that list pane is an overlay that sets
+ * `html { overflow-y: hidden }` and leaves only the FullCalendar scroller.
+ */
+export function hideEventCalendarListSidebar(root) {
+	if (!root) return { hidden: 0, overflowRestored: false };
+
+	const sections = asNodeList(root, ".layout-side-section");
+	sections.forEach((el) => {
+		if (el.classList) el.classList.remove("opened");
+		const overlay = el.querySelector && el.querySelector(".overlay-sidebar");
+		if (overlay && overlay.classList) overlay.classList.remove("opened");
+		const closer = el.querySelector && el.querySelector(".close-sidebar");
+		if (closer && closer.remove) closer.remove();
+	});
+
+	const wrappers = asNodeList(root, ".page-container, .page-wrapper, .layout-main");
+	wrappers.forEach((el) => {
+		if (el.classList) el.classList.add("no-list-sidebar");
+	});
+
+	let overflowRestored = false;
+	const html = root.documentElement || (root.querySelector && root.querySelector("html"));
+	if (html && html.style && html.style.overflowY === "hidden") {
+		html.style.overflowY = "";
+		overflowRestored = true;
+	}
+	if (root.body && root.body.style && (root.body.style.overflow === "hidden" || root.body.style.overflowY === "hidden")) {
+		root.body.style.overflow = "";
+		root.body.style.overflowY = "";
+		overflowRestored = true;
+	}
+
+	return { hidden: sections.length, overflowRestored };
+}
+
 export function attachCalendarEmployeeHelpers(target) {
 	const root =
 		target || (typeof frappe !== "undefined" ? (frappe.vt = frappe.vt || {}) : {});
@@ -203,5 +288,11 @@ export function attachCalendarEmployeeHelpers(target) {
 	dest.asEmployeeRows = asEmployeeRows;
 	dest.stampPreparedEvent = stampPreparedEvent;
 	dest.collectCalendarEvents = collectCalendarEvents;
+	dest.isEventCalendarRoute = isEventCalendarRoute;
+	dest.isMobileCalendarViewport = isMobileCalendarViewport;
+	dest.calendarLayoutOptions = calendarLayoutOptions;
+	dest.applyEventCalendarPageClass = applyEventCalendarPageClass;
+	dest.hideEventCalendarListSidebar = hideEventCalendarListSidebar;
+	dest.EVENT_CALENDAR_PAGE_CLASS = EVENT_CALENDAR_PAGE_CLASS;
 	return dest;
 }

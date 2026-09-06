@@ -60,5 +60,9 @@ frappe.after_ajax(() => {
 		sidebar.set_workspace_sidebar = function () {
 			this.setup('V&T');
 		};
+
+		// Hard reload of a deep link (ex. Event calendar) often paints the
+		// module sidebar before this patch is installed. Re-apply V&T once.
+		sidebar.setup('V&T');
 	}, 100);
 });
