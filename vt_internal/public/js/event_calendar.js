@@ -15,7 +15,7 @@ frappe.views.calendar["Event"] = {
 		color: "color",
 		rrule: "rrule",
 		secondary_status: "status",
-		// Expose le Link Employee pour filtrer la vue (sidebar multi-employés).
+		// Employé de CET bloc (après split get_events : 1 item par personne).
 		custom_employé: "custom_employé",
 	},
 	secondary_status_color: {
@@ -62,6 +62,33 @@ frappe.provide("frappe.vt_cal_employees");
 		return name || NONE;
 	}
 
+	function eventDocName(ev) {
+		// Vrai nom du document Event — jamais l'id d'instance FullCalendar.
+		if (!ev) return "";
+		if (ev.event && ev.event !== ev) return eventDocName(ev.event);
+		const xp = ev.extendedProps || {};
+		if (xp.name) return xp.name;
+		if (typeof ev.name === "string" && ev.name && ev.name.indexOf("::") === -1) {
+			return ev.name;
+		}
+		return "";
+	}
+
+	function rewriteUpdateArgs(result, ev) {
+		const name = eventDocName(ev);
+		if (!name || !result) return result;
+		if (result.args) {
+			result.args.name = name;
+		} else if (Object.prototype.hasOwnProperty.call(result, "name") || result.name !== undefined) {
+			result.name = name;
+		}
+		return result;
+	}
+
+	function eventName(ev) {
+		return eventDocName(ev);
+	}
+
 	function eventEmployee(ev) {
 		if (!ev) return "";
 		const xp = ev.extendedProps || {};
@@ -102,6 +129,14 @@ frappe.provide("frappe.vt_cal_employees");
 		const emp = eventEmployee(info.event);
 		info.el.dataset.vtEmployee = empKey(emp);
 		info.el.classList.toggle("vt-cal-hidden", !isVisible(emp));
+		// Les ids d'instance (`EV::date::emp`) ne doivent pas devenir l'URL du doc.
+		const name = eventName(info.event);
+		if (name) {
+			const anchor = info.el.matches("a[href]") ? info.el : info.el.querySelector("a[href]");
+			if (anchor) {
+				anchor.setAttribute("href", "/app/event/" + encodeURIComponent(name));
+			}
+		}
 	}
 
 	function applyVisibility() {
@@ -367,15 +402,55 @@ frappe.provide("frappe.vt_cal_employees");
 		}
 		const proto = Calendar.prototype;
 
+		const origPrepare = proto.prepare_events;
+		if (typeof origPrepare === "function") {
+			proto.prepare_events = function (events) {
+				const prepared = origPrepare.call(this, events);
+				if (this.doctype !== "Event") return prepared;
+				return (prepared || []).map((d) => {
+					// Id FullCalendar unique par bloc ; le name Event reste dans
+					// d.name / extendedProps.name pour open / drag / resize.
+					if (d.calendar_instance_id) {
+						d.id = d.calendar_instance_id;
+					}
+					return d;
+				});
+			};
+		}
+
+		const origGetUpdateArgs = proto.get_update_args;
+		if (typeof origGetUpdateArgs === "function") {
+			proto.get_update_args = function (event) {
+				const result = origGetUpdateArgs.apply(this, arguments);
+				if (this.doctype !== "Event") return result;
+				return rewriteUpdateArgs(result, event);
+			};
+		}
+
 		const origSetup = proto.setup_options;
 		if (typeof origSetup === "function") {
 			proto.setup_options = function (defaults) {
 				origSetup.call(this, defaults);
 				if (this.doctype !== "Event" || !this.cal_options) return;
-				const prev = this.cal_options.eventDidMount;
+				const prevMount = this.cal_options.eventDidMount;
 				this.cal_options.eventDidMount = (info) => {
-					if (typeof prev === "function") prev.call(this, info);
+					if (typeof prevMount === "function") prevMount.call(this, info);
 					markEventEl(info);
+				};
+				const prevClick = this.cal_options.eventClick;
+				this.cal_options.eventClick = (info) => {
+					const name = eventDocName(info);
+					if (name) {
+						const doctype = (info && info.event && info.event.extendedProps && info.event.extendedProps.doctype) || this.doctype;
+						if (!frappe.model || !frappe.model.can_read || frappe.model.can_read(doctype)) {
+							frappe.set_route("Form", doctype, name);
+						}
+						if (info && info.jsEvent && typeof info.jsEvent.preventDefault === "function") {
+							info.jsEvent.preventDefault();
+						}
+						return;
+					}
+					if (typeof prevClick === "function") return prevClick.call(this, info);
 				};
 			};
 		}
@@ -408,6 +483,8 @@ frappe.provide("frappe.vt_cal_employees");
 
 	frappe.vt_cal_employees.is_visible = isVisible;
 	frappe.vt_cal_employees.event_employee = eventEmployee;
+	frappe.vt_cal_employees.event_doc_name = eventDocName;
+	frappe.vt_cal_employees.rewrite_update_args = rewriteUpdateArgs;
 	frappe.vt_cal_employees.attach = attach;
 
 	const started = Date.now();

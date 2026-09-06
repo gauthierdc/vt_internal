@@ -152,14 +152,17 @@ def timesheet_state():
 def _today_events(employee):
     """Événements planifiés aujourd'hui pour l'employé (table Event).
 
-    Un Event porte `custom_employé` (nom Employee) et `starts_on`. Selon les
-    liens présents, on qualifie l'événement :
+    Un Event porte 0..N employés (table `Event Employee`, repli
+    `custom_employé`) et `starts_on`. Selon les liens présents, on
+    qualifie l'événement :
       - `fiche`  : lié à une fiche de travail (custom_fiche_de_travail) ;
       - `visite` : lié à une visite technique (custom_visite_technique) ;
       - `event`  : autre événement (agenda simple).
     """
+    from vt_internal.vt_internal.utils.event_employees import event_assigned_sql
+
     rows = frappe.db.sql(
-        """
+        f"""
         SELECT
             e.name AS event,
             e.subject AS subject,
@@ -174,11 +177,11 @@ def _today_events(employee):
         FROM `tabEvent` e
         LEFT JOIN `tabFiche de travail` ft ON ft.name = e.custom_fiche_de_travail
         LEFT JOIN `tabVisite Technique` vt ON vt.name = e.custom_visite_technique
-        WHERE e.custom_employé = %s
-          AND DATE(e.starts_on) = %s
+        WHERE {event_assigned_sql("e")}
+          AND DATE(e.starts_on) = %(today)s
         ORDER BY e.starts_on
         """,
-        (employee, frappe.utils.today()),
+        {"employee": employee, "today": frappe.utils.today()},
         as_dict=True,
     )
     for r in rows:

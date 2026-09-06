@@ -1,8 +1,25 @@
 // Converti depuis le Client Script ERP 'Évenement' (Event / Form).
 // Source de vérité : ce fichier (versionné). Le record DB a été supprimé.
 
+function event_employee_rows(doc) {
+    const rows = (doc.custom_event_employees || [])
+        .filter((r) => r.employee)
+        .map((r) => ({ employee: r.employee }));
+    if (rows.length) {
+        return rows;
+    }
+    if (doc.custom_employé) {
+        return [{ employee: doc.custom_employé }];
+    }
+    return [];
+}
+
 frappe.ui.form.on('Event', {
     refresh(frm) {
+        if (frm.fields_dict.custom_event_employees && frm.fields_dict.custom_employé) {
+            frm.set_df_property('custom_employé', 'hidden', 1);
+            frm.set_df_property('custom_employé', 'read_only', 1);
+        }
         frm.dashboard.links_area.hide();
         frm.events.setup_custom_html(frm);
         if(frm.doc.project) {
@@ -485,14 +502,12 @@ function duplicate_event(frm, options = {}) {
         custom_visite_technique: doc.custom_visite_technique
     };
 
-    // Si on duplique pour un employé → mettre l'employé (pas de véhicule)
-    // Si on duplique pour un véhicule → mettre le véhicule (pas d'employé)
+    // Si on duplique pour un employé → table enfant (pas de véhicule)
+    // Si on duplique pour un véhicule → véhicule (pas d'employé)
     if (options.employee) {
-        new_doc.custom_employé = options.employee;
-        // Pas de véhicule
+        new_doc.custom_event_employees = [{ employee: options.employee }];
     } else if (options.vehicle) {
         new_doc.custom_vehicle = options.vehicle;
-        // Pas d'employé
     }
 
     frappe.call({
@@ -571,8 +586,8 @@ function duplicate_event_multiday(frm, nb_days) {
             event_type: doc.event_type,
             custom_fiche_de_travail: doc.custom_fiche_de_travail,
             custom_visite_technique: doc.custom_visite_technique,
-            // Garder le même employé/véhicule que l'original
-            custom_employé: doc.custom_employé,
+            // Garder les mêmes employés / véhicule que l'original
+            custom_event_employees: event_employee_rows(doc),
             custom_vehicle: doc.custom_vehicle
         };
 

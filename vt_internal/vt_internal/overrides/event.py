@@ -77,7 +77,8 @@ def get_events(
 	if filter_condition and "`tabEvent Participants`" in filter_condition:
 		tables.append("`tabEvent Participants`")
 
-	# custom_employé est toujours sélectionné : le calendrier filtre par employé côté client.
+	# custom_employé : repli transition. La table enfant est jointe après coup
+	# pour produire N blocs calendrier (1 par employé) sans casser les permissions.
 	events = frappe.db.sql(
 		"""
 		SELECT `tabEvent`.name,
@@ -167,4 +168,60 @@ def get_events(
 		else:
 			result.append(event)
 
+	result = _split_events_for_calendar(result)
 	return sorted(result, key=lambda d: d["starts_on"])
+
+
+def _split_events_for_calendar(events):
+	"""1 Event → N items FullCalendar (même name, id d'instance unique)."""
+	from vt_internal.vt_internal.utils.event_employees import (
+		child_table_ready,
+		expand_calendar_events,
+	)
+
+	if not events:
+		return events
+
+	employees_by_event = {}
+	if child_table_ready():
+		names = list({e.get("name") for e in events if e.get("name")})
+		if names:
+			rows = frappe.db.sql(
+				"""
+				SELECT parent, employee
+				FROM `tabEvent Employee`
+				WHERE parent IN %(names)s
+				  AND parenttype = 'Event'
+				  AND employee IS NOT NULL
+				  AND employee != ''
+				ORDER BY idx ASC
+				""",
+				{"names": names},
+				as_dict=True,
+			)
+			for row in rows:
+				employees_by_event.setdefault(row.parent, [])
+				if row.employee not in employees_by_event[row.parent]:
+					employees_by_event[row.parent].append(row.employee)
+
+	emp_ids = {emp for emps in employees_by_event.values() for emp in emps}
+	for event in events:
+		legacy = (event.get("custom_employé") or "").strip()
+		if legacy:
+			emp_ids.add(legacy)
+
+	employee_colors = {}
+	if emp_ids:
+		try:
+			if frappe.db.has_column("Employee", "custom_couleur"):
+				for row in frappe.db.get_all(
+					"Employee",
+					filters={"name": ["in", list(emp_ids)]},
+					fields=["name", "custom_couleur"],
+				):
+					if row.custom_couleur:
+						employee_colors[row.name] = row.custom_couleur
+		except Exception:
+			employee_colors = {}
+
+	return expand_calendar_events(events, employees_by_event, employee_colors)

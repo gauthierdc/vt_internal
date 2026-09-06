@@ -91,7 +91,14 @@ def get_data(filters, grouped_by):
 		params["project_type"] = filters.get("project_type")
 
 	if filters.get("employee"):
-		conditions.append("e.custom_employé = %(employee)s")
+		from vt_internal.vt_internal.utils.event_employees import event_assigned_sql
+
+		# L'Event match (enfant ou Link), et la ligne jointe est bien CET employé
+		# (évite de remonter Ahmed+Solène comme 2 lignes quand on filtre Ahmed).
+		conditions.append(event_assigned_sql("e"))
+		conditions.append(
+			"(ee.employee = %(employee)s OR (ee.name IS NULL AND e.custom_employé = %(employee)s))"
+		)
 		params["employee"] = filters.get("employee")
 
 	if filters.get("construction_manager"):
@@ -108,7 +115,7 @@ def get_data(filters, grouped_by):
 		SELECT
 			e.name AS event_name,
 			e.project,
-			e.custom_employé AS employee,
+			COALESCE(ee.employee, e.custom_employé) AS employee,
 			e.starts_on,
 			e.ends_on,
 			e.color,
@@ -119,7 +126,10 @@ def get_data(filters, grouped_by):
 			emp.employee_name
 		FROM `tabEvent` e
 		LEFT JOIN `tabProject` p ON p.name = e.project
-		LEFT JOIN `tabEmployee` emp ON emp.name = e.custom_employé
+		LEFT JOIN `tabEvent Employee` ee
+			ON ee.parent = e.name AND ee.parenttype = 'Event'
+		LEFT JOIN `tabEmployee` emp
+			ON emp.name = COALESCE(ee.employee, e.custom_employé)
 		WHERE {where_clause}
 		ORDER BY e.starts_on
 	"""
@@ -142,19 +152,26 @@ def aggregate_by_project(events):
 		"events_list": [],
 	})
 
+	seen_events = set()
 	for event in events:
 		project = event.get("project")
 		if not project:
 			continue
 
 		hours = calculate_hours(event.get("starts_on"), event.get("ends_on"))
+		event_name = event.get("event_name")
 
 		project_data[project]["customer"] = event.get("customer")
 		project_data[project]["ca_projet"] = event.get("ca_projet") or 0
 		project_data[project]["project_type"] = event.get("project_type")
+		# 1 Event = 1 créneau : ne pas multiplier les heures par le nombre d'employés.
+		if event_name and event_name in seen_events:
+			continue
+		if event_name:
+			seen_events.add(event_name)
 		project_data[project]["heures_prevues"] += hours
 		project_data[project]["events_list"].append({
-			"name": event.get("event_name"),
+			"name": event_name,
 			"starts_on": event.get("starts_on"),
 			"hours": hours,
 			"color": event.get("color"),

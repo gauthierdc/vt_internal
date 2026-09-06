@@ -278,7 +278,7 @@ def get_planning(
 	#   • 🔍 visite technique (custom_visite_technique)
 	#   • 📋 fiche de travail (custom_fiche_de_travail)
 	#   • 📅 autre événement
-	# et on affiche l'employé rattaché (custom_employé).
+	# et on affiche les employés rattachés (table enfant, repli custom_employé).
 	ev_rows = frappe.db.sql(
 		f"""
 		SELECT e.project AS project, e.name AS ref, DATE(e.starts_on) AS date,
@@ -295,8 +295,32 @@ def get_planning(
 		tuple([*window, *proj_p]),
 		as_dict=True,
 	)
-	# Noms des employés rattachés aux événements.
-	emp_ids = {r.employe for r in ev_rows if r.employe}
+	from vt_internal.vt_internal.utils.event_employees import child_table_ready
+
+	employees_by_event = {}
+	if ev_rows and child_table_ready():
+		for row in frappe.db.sql(
+			"""
+			SELECT parent, employee
+			FROM `tabEvent Employee`
+			WHERE parent IN %(names)s
+			  AND parenttype = 'Event'
+			  AND employee IS NOT NULL
+			  AND employee != ''
+			ORDER BY idx ASC
+			""",
+			{"names": [r.ref for r in ev_rows]},
+			as_dict=True,
+		):
+			employees_by_event.setdefault(row.parent, [])
+			if row.employee not in employees_by_event[row.parent]:
+				employees_by_event[row.parent].append(row.employee)
+
+	emp_ids = set()
+	for r in ev_rows:
+		emps = employees_by_event.get(r.ref) or ([r.employe] if r.employe else [])
+		employees_by_event[r.ref] = emps
+		emp_ids.update(emps)
 	emp_names = {}
 	if emp_ids:
 		for e in frappe.db.get_all("Employee", filters={"name": ["in", list(emp_ids)]},
@@ -322,8 +346,11 @@ def get_planning(
 			"linked_name": linked,
 			"color": r.color,
 			"category": r.category,
-			"employee": r.employe or "",
-			"employee_name": emp_names.get(r.employe, r.employe) if r.employe else "",
+			"employee": (employees_by_event.get(r.ref) or [""])[0],
+			"employees": employees_by_event.get(r.ref) or [],
+			"employee_name": ", ".join(
+				emp_names.get(e, e) for e in (employees_by_event.get(r.ref) or [])
+			),
 			"starts_on": str(r.starts_on) if r.starts_on else None,
 			"ends_on": str(r.ends_on) if r.ends_on else None,
 		})
