@@ -23,7 +23,7 @@ frappe.views.calendar["Event"] = {
 		Public: "white",
 		Private: "white",
 	},
-	get_events_method: "frappe.desk.doctype.event.event.get_events",
+	get_events_method: "vt_internal.vt_internal.overrides.event.get_events",
 	options: {
 		weekends: false,
 		height: "calc(100svh - 130px)",
@@ -59,6 +59,10 @@ frappe.provide("frappe.vt");
 
 	function helpers() {
 		return frappe.vt || {};
+	}
+
+	function empHelpers() {
+		return helpers().calendar_employees || {};
 	}
 
 	function eventDocName(ev) {
@@ -99,9 +103,140 @@ frappe.provide("frappe.vt");
 	}
 
 	function eventEmployee(ev) {
+		if (empHelpers().eventEmployee) return empHelpers().eventEmployee(ev);
 		if (!ev) return "";
-		const xp = ev.extendedProps || {};
-		return xp.custom_employé || ev.custom_employé || "";
+		if (ev.event && ev.event !== ev) return eventEmployee(ev.event);
+		const bags = [ev, ev.extendedProps, ev.extendedProps && ev.extendedProps.extendedProps];
+		if (ev._def && ev._def.extendedProps) bags.push(ev._def.extendedProps);
+		for (const bag of bags) {
+			if (!bag) continue;
+			const val = bag.custom_employé || bag.custom_employe || bag.custom_employee;
+			if (val) return String(val).trim();
+		}
+		const instanceId =
+			ev.calendar_instance_id ||
+			(ev.extendedProps && ev.extendedProps.calendar_instance_id) ||
+			ev.id;
+		if (typeof instanceId === "string" && instanceId.indexOf("::") !== -1) {
+			const parts = instanceId.split("::");
+			if (parts.length >= 3) {
+				const emp = parts.slice(2).join("::").trim();
+				if (emp && emp !== "_") return emp;
+			}
+		}
+		return "";
+	}
+
+	function serializeCalendarDate(value) {
+		if (empHelpers().serializeCalendarDate) return empHelpers().serializeCalendarDate(value);
+		if (value == null || value === "") return "";
+		if (typeof value === "object" && typeof value.format === "function") {
+			try {
+				const formatted = value.format("YYYY-MM-DD");
+				if (/^\d{4}-\d{2}-\d{2}$/.test(formatted)) return formatted;
+			} catch (_e) {
+				/* moment-like */
+			}
+		}
+		if (typeof value === "string") {
+			const iso = value.trim().replace(/^["']|["']$/g, "").match(/^(\d{4}-\d{2}-\d{2})/);
+			if (iso) return iso[1];
+		}
+		if (value instanceof Date && !Number.isNaN(value.getTime())) {
+			const y = value.getFullYear();
+			const m = String(value.getMonth() + 1).padStart(2, "0");
+			const day = String(value.getDate()).padStart(2, "0");
+			return `${y}-${m}-${day}`;
+		}
+		return "";
+	}
+
+	function sanitizeCalendarFilters(raw) {
+		if (empHelpers().sanitizeCalendarFilters) return empHelpers().sanitizeCalendarFilters(raw);
+		if (!raw) return [];
+		let value = raw;
+		if (typeof value === "string") {
+			try {
+				value = JSON.parse(value);
+			} catch (_e) {
+				return [];
+			}
+		}
+		if (!Array.isArray(value)) return [];
+		return value.filter((row) => Array.isArray(row) && row.length >= 3);
+	}
+
+	function asEmployeeRows(message) {
+		if (empHelpers().asEmployeeRows) return empHelpers().asEmployeeRows(message);
+		return Array.isArray(message) ? message : [];
+	}
+
+	function mergeEmployeeRows(fromEvents, fromApi) {
+		if (empHelpers().mergeEmployeeRows) return empHelpers().mergeEmployeeRows(fromEvents, fromApi);
+		const events = Array.isArray(fromEvents) ? fromEvents : [];
+		const api = Array.isArray(fromApi) ? fromApi : [];
+		if (!events.length) return api;
+		const apiByKey = {};
+		api.forEach((row) => {
+			if (row) apiByKey[row.name || NONE] = row;
+		});
+		return events.map((row) => {
+			const extra = apiByKey[row.name || NONE];
+			if (!extra) return row;
+			return {
+				...row,
+				employee_name: extra.employee_name || row.employee_name,
+				color: extra.color || row.color,
+				event_count: row.event_count != null ? row.event_count : extra.event_count,
+			};
+		});
+	}
+
+	function collectCalendarEvents(cal, hint) {
+		if (empHelpers().collectCalendarEvents) return empHelpers().collectCalendarEvents(cal, hint);
+		if (Array.isArray(hint)) return hint;
+		const fc = cal && cal.fullCalendar;
+		if (!fc) return [];
+		if (typeof fc.getEvents === "function") {
+			try {
+				const list = fc.getEvents();
+				if (Array.isArray(list) && list.length) return list;
+			} catch (_e) {
+				/* wrapper FC */
+			}
+		}
+		if (fc.calendar && typeof fc.calendar.getEvents === "function") {
+			try {
+				const list = fc.calendar.getEvents();
+				if (Array.isArray(list) && list.length) return list;
+			} catch (_e) {
+				/* wrapper FC */
+			}
+		}
+		return Array.isArray(hint) ? hint : [];
+	}
+
+	function rangeFromInfo(cal, info) {
+		const view = (cal.fullCalendar && cal.fullCalendar.view) || {};
+		const rawStart = info && info.start != null ? info.start : view.activeStart;
+		const rawEnd = info && info.end != null ? info.end : view.activeEnd;
+		const sysStart = cal.get_system_datetime && rawStart != null ? cal.get_system_datetime(rawStart) : rawStart;
+		const sysEnd = cal.get_system_datetime && rawEnd != null ? cal.get_system_datetime(rawEnd) : rawEnd;
+		return {
+			start: serializeCalendarDate(sysStart) || serializeCalendarDate(rawStart),
+			end: serializeCalendarDate(sysEnd) || serializeCalendarDate(rawEnd),
+		};
+	}
+
+	function readListFilters(cal) {
+		try {
+			const area = cal.list_view && cal.list_view.filter_area;
+			if (!area) return [];
+			const raw = typeof area.get === "function" ? area.get() : [];
+			return sanitizeCalendarFilters(raw);
+		} catch (_e) {
+			return [];
+		}
 	}
 
 	function isVisible(name) {
@@ -163,15 +298,12 @@ frappe.provide("frappe.vt");
 		if (!cal) return;
 		state.applying = true;
 		try {
-			const fc = cal.fullCalendar;
-			if (fc && typeof fc.getEvents === "function") {
-				fc.getEvents().forEach((ev) => {
-					const show = isVisible(eventEmployee(ev));
-					if (typeof ev.setProp === "function") {
-						ev.setProp("display", show ? "auto" : "none");
-					}
-				});
-			}
+			collectCalendarEvents(cal).forEach((ev) => {
+				const show = isVisible(eventEmployee(ev));
+				if (typeof ev.setProp === "function") {
+					ev.setProp("display", show ? "auto" : "none");
+				}
+			});
 			const $root = cal.$wrapper || (cal.list_view && cal.list_view.$result);
 			if ($root && $root.length) {
 				$root.find(".fc-event").each(function () {
@@ -254,12 +386,15 @@ frappe.provide("frappe.vt");
 		applyVisibility();
 	}
 
-	function employeesFromEvents(cal) {
-		const fc = cal.fullCalendar;
-		if (!fc || typeof fc.getEvents !== "function") return [];
+	function employeesFromEvents(cal, hint) {
+		if (empHelpers().employeesFromEvents) {
+			return empHelpers().employeesFromEvents(cal, hint, __("Sans employé"));
+		}
+		const events = collectCalendarEvents(cal, hint);
+		if (!events.length) return [];
 		const counts = new Map();
 		const colors = new Map();
-		fc.getEvents().forEach((ev) => {
+		events.forEach((ev) => {
 			const name = eventEmployee(ev);
 			const key = empKey(name);
 			counts.set(key, (counts.get(key) || 0) + 1);
@@ -305,55 +440,65 @@ frappe.provide("frappe.vt");
 			.catch(() => rows);
 	}
 
-	function syncEmployeesFromEvents(cal) {
-		const fallback = employeesFromEvents(cal);
-		if (!fallback.length && !state.employees.length) return;
-		const onlyUnassigned = fallback.length === 1 && !fallback[0].name;
-		if (onlyUnassigned && state.employees.some((row) => row.name)) {
+	function applyEmployeeRows(rows, { allowEmpty = false } = {}) {
+		if ((!rows || !rows.length) && !allowEmpty && state.employees.length) {
+			renderFilter();
 			return;
 		}
-		const known = {};
-		state.employees.forEach((row) => {
-			known[empKey(row.name)] = row;
-		});
-		state.employees = fallback.map((row) => {
-			const prev = known[empKey(row.name)];
-			if (!prev) return row;
-			return {
-				...row,
-				employee_name: prev.employee_name || row.employee_name,
-				color: prev.color || row.color,
-			};
-		});
+		state.employees = rows || [];
 		renderFilter();
 	}
 
+	function syncEmployeesFromEvents(cal, hint) {
+		const fallback = employeesFromEvents(cal, hint);
+		if (!fallback.length) {
+			return;
+		}
+		state.employees = mergeEmployeeRows(fallback, state.employees);
+		renderFilter();
+	}
+
+	function applyApiOrFallback(cal, rangeKey, apiRows) {
+		if (state.rangeKey !== rangeKey) return;
+		const eventRows = employeesFromEvents(cal);
+		const merged = mergeEmployeeRows(eventRows, apiRows);
+		applyEmployeeRows(merged, { allowEmpty: !eventRows.length && !apiRows.length });
+		applyVisibility();
+	}
+
 	function refreshEmployees(cal, info) {
-		const start = cal.get_system_datetime ? cal.get_system_datetime(info.start) : info.start;
-		const end = cal.get_system_datetime ? cal.get_system_datetime(info.end) : info.end;
-		const filters =
-			cal.list_view && cal.list_view.filter_area && cal.list_view.filter_area.get
-				? cal.list_view.filter_area.get()
-				: [];
+		if (!cal) return;
+		state.cal = cal;
+		const { start, end } = rangeFromInfo(cal, info || {});
+		const filters = readListFilters(cal);
 		const rangeKey = `${start}|${end}|${JSON.stringify(filters)}`;
 		state.rangeKey = rangeKey;
 
+		const alreadyLoaded = employeesFromEvents(cal);
+		if (alreadyLoaded.length) {
+			applyEmployeeRows(mergeEmployeeRows(alreadyLoaded, state.employees));
+		}
+
+		if (!start || !end) {
+			resolveNames(alreadyLoaded).then((rows) => applyApiOrFallback(cal, rangeKey, rows));
+			return;
+		}
+
+		const args = { start, end };
+		if (filters.length) args.filters = filters;
+
 		frappe.call({
 			method: METHOD,
-			args: { start, end, filters },
+			args,
 			callback: (r) => {
-				if (state.rangeKey !== rangeKey) return;
-				state.employees = r.message || [];
-				renderFilter();
-				applyVisibility();
+				if (r && r.exc) {
+					resolveNames(employeesFromEvents(cal)).then((rows) => applyApiOrFallback(cal, rangeKey, rows));
+					return;
+				}
+				applyApiOrFallback(cal, rangeKey, asEmployeeRows(r && r.message));
 			},
 			error: () => {
-				resolveNames(employeesFromEvents(cal)).then((rows) => {
-					if (state.rangeKey !== rangeKey) return;
-					state.employees = rows;
-					renderFilter();
-					applyVisibility();
-				});
+				resolveNames(employeesFromEvents(cal)).then((rows) => applyApiOrFallback(cal, rangeKey, rows));
 			},
 		});
 	}
@@ -439,15 +584,20 @@ frappe.provide("frappe.vt");
 	function bindCalendar(cal) {
 		if (cal.__vt_emp_bound) return;
 		const fc = cal.fullCalendar;
-		if (!fc || typeof fc.on !== "function") return;
+		if (!fc) return;
 		cal.__vt_emp_bound = true;
-		fc.on("datesSet", (info) => refreshEmployees(cal, info));
-		fc.on("eventsSet", () => {
+		if (typeof fc.on === "function") {
+			fc.on("datesSet", (info) => refreshEmployees(cal, info));
+			fc.on("eventsSet", (events) => {
+				syncEmployeesFromEvents(cal, events);
+				applyVisibility();
+			});
+		}
+		const view = fc.view || (typeof fc.getView === "function" && fc.getView());
+		if (view && (view.activeStart || view.activeEnd)) {
+			refreshEmployees(cal, { start: view.activeStart, end: view.activeEnd });
+		} else {
 			syncEmployeesFromEvents(cal);
-			applyVisibility();
-		});
-		if (fc.view) {
-			refreshEmployees(cal, { start: fc.view.activeStart, end: fc.view.activeEnd });
 		}
 	}
 
@@ -503,7 +653,11 @@ frappe.provide("frappe.vt");
 			proto.prepare_events = function (events) {
 				const prepared = origPrepare.call(this, events);
 				if (this.doctype !== "Event") return prepared;
+				const stamp = empHelpers().stampPreparedEvent;
 				return (prepared || []).map((d) => {
+					if (stamp) {
+						return stamp(d, { eventDocName, eventFormHref });
+					}
 					const name = eventDocName(d.name || d.id || d);
 					if (name) d.name = name;
 					if (d.calendar_instance_id) {
@@ -512,6 +666,13 @@ frappe.provide("frappe.vt");
 					if (name) {
 						d.url = eventFormHref(name);
 					}
+					const emp = eventEmployee(d);
+					d.custom_employé = emp;
+					d.extendedProps = Object.assign({}, d.extendedProps, {
+						custom_employé: emp,
+						calendar_instance_id: d.calendar_instance_id || d.id,
+						name: name || d.name,
+					});
 					return d;
 				});
 			};
@@ -561,6 +722,17 @@ frappe.provide("frappe.vt");
 					}
 					if (typeof prevClick === "function") return prevClick.call(this, info);
 				};
+				const prevDatesSet = this.cal_options.datesSet;
+				this.cal_options.datesSet = (info) => {
+					if (typeof prevDatesSet === "function") prevDatesSet.call(this, info);
+					refreshEmployees(this, info);
+				};
+				const prevEventsSet = this.cal_options.eventsSet;
+				this.cal_options.eventsSet = (events) => {
+					if (typeof prevEventsSet === "function") prevEventsSet.call(this, events);
+					syncEmployeesFromEvents(this, events);
+					applyVisibility();
+				};
 			};
 		}
 
@@ -597,6 +769,9 @@ frappe.provide("frappe.vt");
 	frappe.vt_cal_employees.event_doc_name = eventDocName;
 	frappe.vt_cal_employees.event_form_href = eventFormHref;
 	frappe.vt_cal_employees.rewrite_update_args = rewriteUpdateArgs;
+	frappe.vt_cal_employees.serialize_calendar_date = serializeCalendarDate;
+	frappe.vt_cal_employees.sanitize_calendar_filters = sanitizeCalendarFilters;
+	frappe.vt_cal_employees.employees_from_events = employeesFromEvents;
 	frappe.vt_cal_employees.attach = attach;
 
 	$(document).on("click.vt-cal-emp-filter", closeMenuOnOutside);
