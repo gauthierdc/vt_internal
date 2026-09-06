@@ -11,3 +11,9 @@
 import "./vt/timer";
 import "./vt/photos";
 import "./vt/timer_widget";
+import { attachCalendarEmployeeHelpers } from "./event_calendar_employees.js";
+
+if (typeof frappe !== "undefined") {
+	frappe.provide("frappe.vt");
+	attachCalendarEmployeeHelpers(frappe.vt);
+}

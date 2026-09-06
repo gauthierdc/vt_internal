@@ -4,6 +4,7 @@
 #   - get_event_detail : détail enrichi (VT/FDT, adresse, téléphone) pour la modale
 #   - get_calendar_employees : employés distincts visibles sur [start, end] (dropdown filtre)
 
+import datetime
 import json
 
 import frappe
@@ -159,6 +160,57 @@ def _employee_details(employee_ids):
 	return {row.name: row for row in rows}
 
 
+def _as_date_param(value):
+	"""Normalise start/end (Date, datetime, ISO, SQL) en `YYYY-MM-DD`."""
+	if value is None or value == "":
+		return value
+	if isinstance(value, datetime.datetime):
+		return value.date().isoformat()
+	if isinstance(value, datetime.date):
+		return value.isoformat()
+	text = str(value).strip().strip('"').strip("'")
+	if len(text) >= 10 and text[4:5] == "-" and text[7:8] == "-":
+		candidate = text[:10]
+		try:
+			datetime.date.fromisoformat(candidate)
+			return candidate
+		except ValueError:
+			pass
+	return text
+
+
+def _sanitize_filters(filters):
+	"""Liste de filtres Frappe, ou None si payload vide / illisible."""
+	if filters in (None, "", [], {}, ()):
+		return None
+	if isinstance(filters, str):
+		try:
+			filters = json.loads(filters)
+		except Exception:
+			return None
+	if not isinstance(filters, (list, tuple)):
+		return None
+	cleaned = []
+	for row in filters:
+		if isinstance(row, (list, tuple)) and len(row) >= 3:
+			cleaned.append(list(row))
+		elif isinstance(row, dict) and row.get("fieldname") and row.get("operator"):
+			cleaned.append(row)
+	return cleaned or None
+
+
+def _safe_get_events(get_events, start, end, filters):
+	try:
+		return get_events(start=start, end=end, filters=filters) or []
+	except Exception:
+		if filters:
+			try:
+				return get_events(start=start, end=end, filters=None) or []
+			except Exception:
+				return []
+		return []
+
+
 @frappe.whitelist()
 def get_calendar_employees(start, end, filters=None):
 	"""Employés distincts ayant au moins un Event visible sur [start, end].
@@ -168,9 +220,9 @@ def get_calendar_employees(start, end, filters=None):
 	"""
 	from vt_internal.vt_internal.overrides.event import get_events
 
-	if isinstance(filters, str):
-		filters = json.loads(filters)
-
-	events = get_events(start=start, end=end, filters=filters)
+	start = _as_date_param(start)
+	end = _as_date_param(end)
+	filters = _sanitize_filters(filters)
+	events = _safe_get_events(get_events, start, end, filters)
 	ids = {_event_employee_id(e) for e in events}
 	return build_employee_rows(events, _employee_details(ids))
