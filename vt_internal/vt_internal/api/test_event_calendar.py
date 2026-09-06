@@ -1,5 +1,5 @@
 # Copyright (c) 2026, Verre & Transparence and contributors
-# Tests unitaires de l'agrégation sidebar (sans site Frappe).
+# Tests unitaires de l'agrégation du filtre employés (sans site Frappe).
 
 import importlib.util
 import sys

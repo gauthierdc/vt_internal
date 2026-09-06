@@ -17,6 +17,7 @@ _SPEC.loader.exec_module(_MOD)
 
 absorb_legacy_employee = _MOD.absorb_legacy_employee
 calendar_instance_id = _MOD.calendar_instance_id
+event_doc_name = _MOD.event_doc_name
 employee_ids_from_rows = _MOD.employee_ids_from_rows
 expand_calendar_events = _MOD.expand_calendar_events
 get_event_employee_ids = _MOD.get_event_employee_ids
@@ -155,6 +156,29 @@ class TestExpandCalendarEvents(unittest.TestCase):
 		events = [{"name": "EV-4", "starts_on": "x", "color": "#VEHICLE", "custom_employé": ""}]
 		expanded = expand_calendar_events(events, {"EV-4": ["EMP-A"]}, {"EMP-A": "#EMP"})
 		self.assertEqual(expanded[0]["color"], "#EMP")
+
+
+class TestEventDocName(unittest.TestCase):
+	def test_strips_instance_id_and_encoded_url(self):
+		self.assertEqual(
+			event_doc_name("EV02793::2026-10-12 09:15:00::Elmedhi Chaoui"),
+			"EV02793",
+		)
+		self.assertEqual(
+			event_doc_name("EV02793%3A%3A2026-10-12%2009%3A15%3A00%3A%3AElmedhi%20Chaoui"),
+			"EV02793",
+		)
+		self.assertEqual(
+			event_doc_name(
+				"https://bureau.verretransparence.fr/desk/event/"
+				"EV02793%3A%3A2026-10-12%2009%3A15%3A00%3A%3AElmedhi%20Chaoui"
+			),
+			"EV02793",
+		)
+		self.assertEqual(event_doc_name("/app/event/EV02793"), "EV02793")
+		self.assertEqual(event_doc_name("EV02793"), "EV02793")
+		self.assertEqual(event_doc_name(""), "")
+		self.assertEqual(event_doc_name(None), "")
 
 
 class TestPrevisionnelProjectDedupe(unittest.TestCase):

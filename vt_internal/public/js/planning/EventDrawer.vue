@@ -134,7 +134,10 @@ const linkedLabel = computed(() => {
 watch(
 	() => props.store && props.store.nonce,
 	() => {
-		const id = props.store && props.store.eventId;
+		const raw = props.store && props.store.eventId;
+		const id =
+			(frappe.vt && frappe.vt.event_doc_name && frappe.vt.event_doc_name(raw)) ||
+			String(raw || "").split("::")[0];
 		if (!id) return;
 		title.value = (props.store && props.store.title) || "";
 		open.value = true;

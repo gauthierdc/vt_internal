@@ -287,7 +287,7 @@ function render_custom_html(frm, options) {
 
     const btn_style = 'display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s ease; width: 100%;';
 
-    // Ligne de boutons : Maps + Dupliquer Employé + Dupliquer Véhicule + Multi-jours + Supprimer
+    // Ligne de boutons : Maps + Dupliquer Véhicule + Multi-jours + Supprimer
     html += '<div style="display: flex; gap: 8px;">';
     
     if (address_display) {
@@ -305,11 +305,7 @@ function render_custom_html(frm, options) {
         `;
     }
     
-    // Deux boutons de duplication : employé ET véhicule
     html += `
-        <button class="btn btn-duplicate-employee" style="${btn_style} width: 48px; flex: none; background-color: #7B1FA2; color: #ffffff;" title="Dupliquer pour un employé">
-            👷
-        </button>
         <button class="btn btn-duplicate-vehicle" style="${btn_style} width: 48px; flex: none; background-color: #00796B; color: #ffffff;" title="Dupliquer pour un véhicule">
             🚐
         </button>
@@ -357,10 +353,6 @@ function render_custom_html(frm, options) {
     $wrapper.html(html);
 
     // Events
-    $wrapper.find('.btn-duplicate-employee').on('click', () => {
-        show_duplicate_employee_dialog(frm);
-    });
-
     $wrapper.find('.btn-duplicate-vehicle').on('click', () => {
         show_duplicate_vehicle_dialog(frm);
     });
@@ -391,33 +383,6 @@ function render_custom_html(frm, options) {
             frappe.set_route('Form', doctype, docname);
         });
     }
-}
-
-// === DIALOG: Dupliquer pour un employé ===
-function show_duplicate_employee_dialog(frm) {
-    const d = new frappe.ui.Dialog({
-        title: 'Dupliquer pour un employé',
-        fields: [{
-            label: 'Employé',
-            fieldname: 'employee',
-            fieldtype: 'Link',
-            options: 'Employee',
-            reqd: 1,
-            get_query: function() {
-                return {
-                    filters: {
-                        designation: 'Poseur'
-                    }
-                };
-            }
-        }],
-        primary_action_label: 'Dupliquer',
-        primary_action(values) {
-            d.hide();
-            duplicate_event(frm, { employee: values.employee });
-        }
-    });
-    d.show();
 }
 
 // === DIALOG: Dupliquer pour un véhicule ===
@@ -502,11 +467,7 @@ function duplicate_event(frm, options = {}) {
         custom_visite_technique: doc.custom_visite_technique
     };
 
-    // Si on duplique pour un employé → table enfant (pas de véhicule)
-    // Si on duplique pour un véhicule → véhicule (pas d'employé)
-    if (options.employee) {
-        new_doc.custom_event_employees = [{ employee: options.employee }];
-    } else if (options.vehicle) {
+    if (options.vehicle) {
         new_doc.custom_vehicle = options.vehicle;
     }
 

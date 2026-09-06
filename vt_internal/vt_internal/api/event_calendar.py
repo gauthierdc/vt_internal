@@ -2,7 +2,7 @@
 # API du drawer d'événement (remplace le popover natif sur le calendrier Dokos).
 #
 #   - get_event_detail : détail enrichi (VT/FDT, adresse, téléphone) pour la modale
-#   - get_calendar_employees : employés distincts visibles sur [start, end]
+#   - get_calendar_employees : employés distincts visibles sur [start, end] (dropdown filtre)
 
 import json
 
@@ -41,6 +41,9 @@ def _compose_address(address_name):
 def get_event_detail(name):
 	"""Détail enrichi d'un Event pour la modale : dates, type, description, et
 	infos de la Visite Technique / Fiche de travail liée (adresse, téléphone)."""
+	from vt_internal.vt_internal.utils.event_employees import event_doc_name
+
+	name = event_doc_name(name)
 	doc = frappe.get_doc("Event", name)  # applique les permissions
 	doc.check_permission("read")
 
@@ -93,7 +96,7 @@ def _event_employee_id(event):
 
 
 def build_employee_rows(events, employee_details=None):
-	"""Agrège les blocs calendrier en lignes sidebar : name, employee_name, color, event_count.
+	"""Agrège les blocs calendrier en lignes de filtre : name, employee_name, color, event_count.
 
 	`employee_details` : {employee_name_id: {employee_name, custom_couleur}}.
 	Un Event Ahmed+Solène arrive déjà en 2 items : il compte pour les deux.
@@ -161,7 +164,7 @@ def get_calendar_employees(start, end, filters=None):
 	"""Employés distincts ayant au moins un Event visible sur [start, end].
 
 	Réutilise `get_events` (permissions Public / Private / partages / User Permissions)
-	pour que la sidebar liste exactement les personnes présentes sur la vue calendrier.
+	pour que le filtre liste exactement les personnes présentes sur la vue calendrier.
 	"""
 	from vt_internal.vt_internal.overrides.event import get_events
 

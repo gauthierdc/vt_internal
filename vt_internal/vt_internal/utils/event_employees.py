@@ -190,6 +190,31 @@ def calendar_instance_id(event_name, starts_on, employee):
 	return f"{event_name}::{start}::{emp}"
 
 
+def event_doc_name(value):
+	"""Vrai nom du document Event — jamais l'id d'instance FullCalendar.
+
+	Après le split multi-employés, FullCalendar utilise
+	``EV02793::2026-10-12 09:15:00::Elmedhi Chaoui`` comme ``event.id``.
+	Toute ouverture / édition / href doit revenir à ``EV02793``.
+	"""
+	if value is None:
+		return ""
+	text = str(value).strip()
+	if not text:
+		return ""
+	if "%" in text:
+		from urllib.parse import unquote
+
+		text = unquote(text)
+	if "/" in text:
+		text = text.rstrip("/").split("/")[-1]
+		if "%" in text:
+			from urllib.parse import unquote
+
+			text = unquote(text)
+	return text.split("::", 1)[0]
+
+
 def expand_calendar_events(events, employees_by_event, employee_colors=None):
 	"""Duplique chaque Event en N items d'affichage (1 par employé).
 
