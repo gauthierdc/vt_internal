@@ -24,17 +24,22 @@ frappe.views.calendar["Event"] = {
 		Private: "white",
 	},
 	get_events_method: "vt_internal.vt_internal.overrides.event.get_events",
-	options: {
-		weekends: false,
-		height: "calc(100svh - 130px)",
-		expandRows: true,
-		eventClassNames: function (arg) {
-			const api = frappe.vt_cal_employees;
-			if (!api || !api.event_employee) return [];
-			const emp = api.event_employee(arg.event);
-			return api.is_visible(emp) ? [] : ["vt-cal-hidden"];
+	options: Object.assign(
+		{
+			weekends: false,
+			eventClassNames: function (arg) {
+				const api = frappe.vt_cal_employees;
+				if (!api || !api.event_employee) return [];
+				const emp = api.event_employee(arg.event);
+				return api.is_visible(emp) ? [] : ["vt-cal-hidden"];
+			},
 		},
-	},
+		frappe.vt && frappe.vt.calendar_employees && frappe.vt.calendar_employees.calendarLayoutOptions
+			? frappe.vt.calendar_employees.calendarLayoutOptions(window.innerWidth)
+			: window.innerWidth < 768
+				? { height: "auto", expandRows: false }
+				: { height: "calc(100svh - 130px)", expandRows: true }
+	),
 };
 
 // ---------------------------------------------------------------------------
@@ -63,6 +68,57 @@ frappe.provide("frappe.vt");
 
 	function empHelpers() {
 		return helpers().calendar_employees || {};
+	}
+
+	function isEventCalendarRoute(route) {
+		if (empHelpers().isEventCalendarRoute) return empHelpers().isEventCalendarRoute(route);
+		if (!Array.isArray(route) || route.length < 3) return false;
+		return route[0] === "List" && route[1] === "Event" && route[2] === "Calendar";
+	}
+
+	function calendarLayoutOptions(width) {
+		if (empHelpers().calendarLayoutOptions) return empHelpers().calendarLayoutOptions(width);
+		return width < 768
+			? { height: "auto", expandRows: false }
+			: { height: "calc(100svh - 130px)", expandRows: true };
+	}
+
+	function applyCalendarChrome(on) {
+		const doc = document;
+		if (empHelpers().applyEventCalendarPageClass) {
+			empHelpers().applyEventCalendarPageClass(doc, on);
+		} else if (doc.body && doc.body.classList) {
+			doc.body.classList.toggle("vt-event-calendar-page", Boolean(on));
+		}
+		if (!on) return;
+		if (empHelpers().hideEventCalendarListSidebar) {
+			empHelpers().hideEventCalendarListSidebar(doc);
+		}
+		const page = cur_list && cur_list.page;
+		if (page) {
+			page.disable_sidebar_toggle = true;
+			if (typeof page.close_sidebar === "function") {
+				try {
+					page.close_sidebar();
+				} catch (_e) {
+					/* overlay déjà fermé */
+				}
+			}
+			if (page.sidebar && typeof page.sidebar.hide === "function") {
+				page.sidebar.hide();
+			}
+			if (page.wrapper && page.wrapper.addClass) {
+				page.wrapper.addClass("no-list-sidebar");
+			}
+		}
+	}
+
+	function applyCalendarHeight(cal) {
+		const fc = cal && cal.fullCalendar;
+		if (!fc || typeof fc.setOption !== "function") return;
+		const opts = calendarLayoutOptions(window.innerWidth);
+		fc.setOption("height", opts.height);
+		fc.setOption("expandRows", opts.expandRows);
 	}
 
 	function eventDocName(ev) {
@@ -586,6 +642,15 @@ frappe.provide("frappe.vt");
 		const fc = cal.fullCalendar;
 		if (!fc) return;
 		cal.__vt_emp_bound = true;
+		if (!cal.__vt_layout_resize) {
+			cal.__vt_layout_resize = () => {
+				applyCalendarChrome(true);
+				applyCalendarHeight(cal);
+			};
+			$(window).on("resize.vt-event-calendar", frappe.utils && frappe.utils.debounce
+				? frappe.utils.debounce(cal.__vt_layout_resize, 200)
+				: cal.__vt_layout_resize);
+		}
 		if (typeof fc.on === "function") {
 			fc.on("datesSet", (info) => refreshEmployees(cal, info));
 			fc.on("eventsSet", (events) => {
@@ -604,6 +669,8 @@ frappe.provide("frappe.vt");
 	function attach(cal) {
 		if (!cal || cal.doctype !== "Event") return;
 		state.cal = cal;
+		applyCalendarChrome(true);
+		applyCalendarHeight(cal);
 		injectFilter(cal);
 		bindCalendar(cal);
 		renderFilter();
@@ -705,6 +772,9 @@ frappe.provide("frappe.vt");
 			proto.setup_options = function (defaults) {
 				origSetup.call(this, defaults);
 				if (this.doctype !== "Event" || !this.cal_options) return;
+				const layout = calendarLayoutOptions(window.innerWidth);
+				this.cal_options.height = layout.height;
+				this.cal_options.expandRows = layout.expandRows;
 				const prevMount = this.cal_options.eventDidMount;
 				this.cal_options.eventDidMount = (info) => {
 					if (typeof prevMount === "function") prevMount.call(this, info);
@@ -744,16 +814,29 @@ frappe.provide("frappe.vt");
 			};
 		}
 
+		const origSetHeight = proto.set_calendar_height;
+		if (typeof origSetHeight === "function") {
+			proto.set_calendar_height = function () {
+				if (this.doctype === "Event" && calendarLayoutOptions(window.innerWidth).height === "auto") {
+					applyCalendarHeight(this);
+					return;
+				}
+				return origSetHeight.apply(this, arguments);
+			};
+		}
+
 		proto.__vt_emp_patched = true;
 		return true;
 	}
 
 	function attachIfReady() {
 		const route = frappe.get_route ? frappe.get_route() : [];
-		if (!(route[0] === "List" && route[1] === "Event" && route[2] === "Calendar")) {
+		if (!isEventCalendarRoute(route)) {
 			state.menuOpen = false;
+			applyCalendarChrome(false);
 			return;
 		}
+		applyCalendarChrome(true);
 		const cal = cur_list && cur_list.calendar;
 		if (cal && cal.fullCalendar) attach(cal);
 	}

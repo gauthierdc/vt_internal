@@ -158,6 +158,23 @@
 	display: none !important;
 }
 
+/*
+ * Calendar-only: hide the ListView Assigned/Tags pane. Document overflow
+ * unlock is desk-wide (vt_forms.bundle.css + vt_desk_mobile_scroll.js).
+ */
+body.vt-event-calendar-page .page-container .layout-side-section {
+	display: none !important;
+}
+
+body.vt-event-calendar-page .page-head .sidebar-toggle-btn {
+	display: none !important;
+}
+
+body.vt-event-calendar-page .layout-main-section-wrapper {
+	width: 100%;
+	max-width: 100%;
+}
+
 @media (max-width: 768px) {
 	.vt-cal-filterbar {
 		justify-content: stretch;
@@ -176,5 +193,21 @@
 	.vt-cal-emp-filter__menu {
 		left: 0;
 		right: 0;
+	}
+
+	/* Calendar grid: height:auto — do not keep a nested time-grid scroller. */
+	body.vt-event-calendar-page .page-container,
+	body.vt-event-calendar-page .layout-main,
+	body.vt-event-calendar-page .layout-main-section-wrapper,
+	body.vt-event-calendar-page .layout-main-section,
+	body.vt-event-calendar-page .frappe-list,
+	body.vt-event-calendar-page .result {
+		overflow: visible !important;
+		height: auto !important;
+		max-height: none !important;
+	}
+
+	body.vt-event-calendar-page .fc .fc-scroller {
+		overflow: visible !important;
 	}
 }

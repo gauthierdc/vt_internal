@@ -12,8 +12,24 @@ import "./vt/timer";
 import "./vt/photos";
 import "./vt/timer_widget";
 import { attachCalendarEmployeeHelpers } from "./event_calendar_employees.js";
+import { attachDeskMobileScrollHelpers, installDeskMobileScrollGuard } from "./vt_desk_mobile_scroll.js";
 
 if (typeof frappe !== "undefined") {
 	frappe.provide("frappe.vt");
 	attachCalendarEmployeeHelpers(frappe.vt);
+	attachDeskMobileScrollHelpers(frappe.vt);
+
+	const bootMobileScroll = () => {
+		installDeskMobileScrollGuard({
+			doc: document,
+			pageProto: frappe.ui && frappe.ui.Page && frappe.ui.Page.prototype,
+			router: frappe.router,
+			getWidth: () => window.innerWidth,
+		});
+	};
+	if (frappe.after_ajax) {
+		frappe.after_ajax(bootMobileScroll);
+	} else {
+		bootMobileScroll();
+	}
 }
