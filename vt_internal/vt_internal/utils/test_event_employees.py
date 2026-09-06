@@ -15,12 +15,23 @@ _SPEC = importlib.util.spec_from_file_location("vt_event_employees", _MODULE_PAT
 _MOD = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MOD)
 
+absorb_legacy_employee = _MOD.absorb_legacy_employee
 calendar_instance_id = _MOD.calendar_instance_id
 employee_ids_from_rows = _MOD.employee_ids_from_rows
 expand_calendar_events = _MOD.expand_calendar_events
 get_event_employee_ids = _MOD.get_event_employee_ids
 resolve_canonical_color = _MOD.resolve_canonical_color
 DEFAULT_EVENT_COLOR = _MOD.DEFAULT_EVENT_COLOR
+EVENT_EMPLOYEE_FIELD = _MOD.EVENT_EMPLOYEE_FIELD
+LEGACY_EMPLOYEE_FIELD = _MOD.LEGACY_EMPLOYEE_FIELD
+
+
+class _FakeDoc(dict):
+	def append(self, field, row):
+		self.setdefault(field, []).append(row)
+
+	def set(self, field, value):
+		self[field] = value
 
 
 class TestEmployeeIds(unittest.TestCase):
@@ -43,6 +54,40 @@ class TestEmployeeIds(unittest.TestCase):
 	def test_no_employees(self):
 		self.assertEqual(get_event_employee_ids({}), [])
 		self.assertEqual(employee_ids_from_rows(None, legacy=""), [])
+
+
+class TestAbsorbLegacyEmployee(unittest.TestCase):
+	def test_leftover_link_not_reinjected_when_table_differs(self):
+		doc = _FakeDoc(
+			{
+				EVENT_EMPLOYEE_FIELD: [{"employee": "EMP-SOLENE"}],
+				LEGACY_EMPLOYEE_FIELD: "EMP-AHMED",
+			}
+		)
+		absorb_legacy_employee(doc)
+		ids = [r["employee"] for r in doc[EVENT_EMPLOYEE_FIELD]]
+		self.assertEqual(ids, ["EMP-SOLENE"])
+		self.assertIsNone(doc[LEGACY_EMPLOYEE_FIELD])
+
+	def test_empty_table_absorbs_link_once_then_clears(self):
+		doc = _FakeDoc({EVENT_EMPLOYEE_FIELD: [], LEGACY_EMPLOYEE_FIELD: "EMP-AHMED"})
+		absorb_legacy_employee(doc)
+		ids = [r["employee"] for r in doc[EVENT_EMPLOYEE_FIELD]]
+		self.assertEqual(ids, ["EMP-AHMED"])
+		self.assertIsNone(doc[LEGACY_EMPLOYEE_FIELD])
+		# Second save : Link déjà vide, table remplie → pas de doublon.
+		absorb_legacy_employee(doc)
+		ids = [r["employee"] for r in doc[EVENT_EMPLOYEE_FIELD]]
+		self.assertEqual(ids, ["EMP-AHMED"])
+		self.assertIsNone(doc[LEGACY_EMPLOYEE_FIELD])
+
+	def test_empty_table_and_empty_link_stays_unassigned(self):
+		doc = _FakeDoc({EVENT_EMPLOYEE_FIELD: [], LEGACY_EMPLOYEE_FIELD: "EMP-AHMED"})
+		absorb_legacy_employee(doc)
+		doc[EVENT_EMPLOYEE_FIELD] = []
+		absorb_legacy_employee(doc)
+		self.assertEqual(doc[EVENT_EMPLOYEE_FIELD], [])
+		self.assertIsNone(doc[LEGACY_EMPLOYEE_FIELD])
 
 
 class TestCanonicalColor(unittest.TestCase):

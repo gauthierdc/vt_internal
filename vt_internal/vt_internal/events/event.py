@@ -17,8 +17,8 @@ from vt_internal.vt_internal.utils.event_employees import (
 
 def validate(doc, method=None):
     # --- depuis Server Script « Événement avant la sauvegarde » (Before Save) ---
-    # Table enfant = source de vérité. On absorbe encore custom_employé s'il
-    # arrive via un ancien client, sans le réécrire.
+    # Table enfant = source de vérité. Le Link n'est absorbé que s'il est
+    # encore le seul renseignement (table vide), puis il est vidé.
     absorb_legacy_employee(doc)
     dedupe_employee_rows(doc)
 

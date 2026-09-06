@@ -2,8 +2,8 @@
 
 Un Event reste **un** document. Les employés sont une table enfant
 (`Event Employee` / `custom_event_employees`). L'ancien Link
-`custom_employé` n'est plus écrit : on le lit encore en repli le temps
-que le patch de migration ait copié les données.
+`custom_employé` n'est plus une source d'écriture : on le lit en repli
+seulement si la table enfant est vide, puis on le vide (migrate + validate).
 
 Règle de couleur (documentée) :
 - `Event.color` canonique : véhicule gagne si `custom_vehicle` est posé ;
@@ -94,22 +94,51 @@ def get_event_employee_ids(doc):
 	return employee_ids_from_rows(rows, legacy=_legacy_employee(doc))
 
 
-def absorb_legacy_employee(doc):
-	"""Si `custom_employé` est encore rempli et absent de la table, l'ajouter.
+def _append_employee(doc, employee):
+	row = {"employee": employee}
+	if hasattr(doc, "append"):
+		doc.append(EVENT_EMPLOYEE_FIELD, row)
+		return
+	rows = list(doc.get(EVENT_EMPLOYEE_FIELD) or [])
+	rows.append(row)
+	if isinstance(doc, dict):
+		doc[EVENT_EMPLOYEE_FIELD] = rows
 
-	Ne réécrit pas `custom_employé` (plus d'écriture sur le champ déprécié).
+
+def _clear_legacy_employee(doc):
+	"""Vide le Link déprécié : la table enfant est seule source de vérité."""
+	if not doc:
+		return
+	if isinstance(doc, dict):
+		doc[LEGACY_EMPLOYEE_FIELD] = None
+		return
+	if hasattr(doc, "meta") and not doc.meta.has_field(LEGACY_EMPLOYEE_FIELD):
+		return
+	if hasattr(doc, "set"):
+		doc.set(LEGACY_EMPLOYEE_FIELD, None)
+	else:
+		setattr(doc, LEGACY_EMPLOYEE_FIELD, None)
+
+
+def absorb_legacy_employee(doc):
+	"""Repli old-client : n'absorbe `custom_employé` que si la table est vide.
+
+	Dès qu'il y a au moins une ligne enfant, on ne réinjecte jamais le Link
+	(sinon on ne peut plus retirer l'employé d'origine ni passer « Sans employé »).
+	Dans tous les cas on vide le Link après traitement.
 	"""
 	if not doc:
 		return
 	if hasattr(doc, "meta") and not doc.meta.has_field(EVENT_EMPLOYEE_FIELD):
 		return
-	legacy = _legacy_employee(doc)
-	if not legacy:
-		return
 	ids = employee_ids_from_rows(doc.get(EVENT_EMPLOYEE_FIELD))
-	if legacy in ids:
+	if ids:
+		_clear_legacy_employee(doc)
 		return
-	doc.append(EVENT_EMPLOYEE_FIELD, {"employee": legacy})
+	legacy = _legacy_employee(doc)
+	if legacy:
+		_append_employee(doc, legacy)
+	_clear_legacy_employee(doc)
 
 
 def dedupe_employee_rows(doc):

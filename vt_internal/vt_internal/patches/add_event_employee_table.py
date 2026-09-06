@@ -1,8 +1,8 @@
 """Ajoute la table enfant Event Employee + migre `custom_employé`.
 
 Idempotent : ré-exécutable (create_custom_fields update=True, INSERT … NOT EXISTS).
-Le champ Link `custom_employé` est conservé (lecture de repli) mais masqué
-sur le formulaire ; on n'y écrit plus depuis le code de l'app.
+Le champ Link `custom_employé` est masqué, vidé après copie, et n'est
+plus écrit. Lecture de repli seulement si la table enfant est encore vide.
 """
 
 from __future__ import annotations
@@ -109,9 +109,12 @@ def migrate_legacy_employees():
 		""",
 		as_dict=True,
 	)
-	if not rows:
-		return
+	if rows:
+		_insert_legacy_rows(rows)
+	_clear_legacy_link_when_child_exists()
 
+
+def _insert_legacy_rows(rows):
 	now = frappe.utils.now()
 	user = frappe.session.user or "Administrator"
 	for row in rows:
@@ -147,6 +150,23 @@ def migrate_legacy_employees():
 		)
 
 	frappe.logger().info(f"add_event_employee_table: {len(rows)} Event(s) migrés")
+
+
+def _clear_legacy_link_when_child_exists():
+	# Le Link fantôme ne doit plus rester : sinon validate() pourrait le
+	# ré-absorber, et on ne pourrait plus retirer l'employé d'origine.
+	frappe.db.sql(
+		f"""
+		UPDATE `tabEvent` e
+		SET e.`{LEGACY_EMPLOYEE_FIELD}` = NULL
+		WHERE e.`{LEGACY_EMPLOYEE_FIELD}` IS NOT NULL
+		  AND e.`{LEGACY_EMPLOYEE_FIELD}` != ''
+		  AND EXISTS (
+			SELECT 1 FROM `tabEvent Employee` ee
+			WHERE ee.parent = e.name AND ee.parenttype = 'Event'
+		  )
+		"""
+	)
 
 
 def _has_column(doctype, column):
