@@ -80,6 +80,9 @@ frappe.query_reports["Order book"] = {
 		return html;
 	},
 	onload: function (report) {
+		report.page.add_inner_button(__("Ouvrir la page Carnet de commande"), () => {
+			frappe.set_route("carnet-de-commande");
+		});
 		report.$report.on("click", ".editable-construction-status", function () {
 			const name = $(this).data("name");
 			const current_value =

@@ -26,6 +26,7 @@ EVENT_KIND_META = {
 	"event": {"label": "Évt", "icon": "📅", "color": "#546e7a", "bg": "rgba(84,110,122,.14)"},
 }
 
+
 def execute(filters: dict | None = None):
 	"""Return columns, data, HTML summary cards and report_summary."""
 	columns = get_columns()
@@ -37,11 +38,22 @@ def execute(filters: dict | None = None):
 def get_columns() -> list[dict]:
 	"""Planning-oriented column order (Frappe fieldname constraints apply)."""
 	return [
-		{"label": _("Désignation"), "fieldname": "name", "fieldtype": "Link", "options": "Sales Order", "width": 150},
+		{
+			"label": _("Désignation"),
+			"fieldname": "name",
+			"fieldtype": "Link",
+			"options": "Sales Order",
+			"width": 150,
+		},
 		# Client = Customer.customer_name, jamais l'ID / nom comptable.
 		{"label": _("Client"), "fieldname": "customer_name", "fieldtype": "Data", "width": 180},
 		{"label": _("Statut"), "fieldname": "status", "fieldtype": "Data", "width": 150},
-		{"label": _("Statut du chantier"), "fieldname": "custom_construction_status", "fieldtype": "Small Text", "width": 200},
+		{
+			"label": _("Statut du chantier"),
+			"fieldname": "custom_construction_status",
+			"fieldtype": "Small Text",
+			"width": 200,
+		},
 		{
 			"label": _("ARC en cours et date de réception"),
 			"fieldname": "pending_arcs",
@@ -50,8 +62,20 @@ def get_columns() -> list[dict]:
 		},
 		{"label": _("Événements"), "fieldname": "evenements", "fieldtype": "HTML", "width": 280},
 		{"label": _("Référence"), "fieldname": "reference_piece", "fieldtype": "Data", "width": 120},
-		{"label": _("Reste à Facturer"), "fieldname": "remaining_amount", "fieldtype": "Currency", "options": "currency", "width": 140},
-		{"label": _("Total HT"), "fieldname": "total", "fieldtype": "Currency", "options": "currency", "width": 120},
+		{
+			"label": _("Reste à Facturer"),
+			"fieldname": "remaining_amount",
+			"fieldtype": "Currency",
+			"options": "currency",
+			"width": 140,
+		},
+		{
+			"label": _("Total HT"),
+			"fieldname": "total",
+			"fieldtype": "Currency",
+			"options": "currency",
+			"width": 120,
+		},
 		{"label": _("Date de livraison"), "fieldname": "delivery_date", "fieldtype": "Date", "width": 110},
 		{"label": _("Nombre d'h total"), "fieldname": "hours_total", "fieldtype": "Float", "width": 110},
 		{"label": _("Nombre d'h solde"), "fieldname": "hours_solde", "fieldtype": "Float", "width": 110},
@@ -75,21 +99,31 @@ def get_columns() -> list[dict]:
 	]
 
 
-def get_data(filters: dict | None = None) -> list[dict]:
-	"""Return rows (dicts) after applying planner filters."""
+def get_order_book_rows(filters: dict | None = None) -> list[dict]:
+	"""Structured carnet rows (lists of ARCs / events, no HTML).
+
+	Used by the Vue Desk page and wrapped by the Script Report.
+	"""
 	query_filters = dict(filters or {})
 	managers = parse_manager_filter(query_filters)
+	wanted_status = query_filters.pop("status", None)
 
 	if query_filters.get("cost_center"):
 		query_filters["cost_center"] = ["descendants of (inclusive)", query_filters["cost_center"]]
 
 	# Always exclude closed / cancelled / fully billed / stats-excluded orders.
-	query_filters.update({
-		"status": ["!=", "Closed"],
-		"per_billed": ["<", 100],
-		"docstatus": ["!=", 2],
-		"custom_exclude_from_statistics": ["!=", 1],
-	})
+	# A specific SO status (Vue filter) still excludes Closed.
+	if wanted_status and wanted_status != "Closed":
+		query_filters["status"] = wanted_status
+	else:
+		query_filters["status"] = ["!=", "Closed"]
+	query_filters.update(
+		{
+			"per_billed": ["<", 100],
+			"docstatus": ["!=", 2],
+			"custom_exclude_from_statistics": ["!=", 1],
+		}
+	)
 
 	list_kwargs = {
 		"filters": query_filters,
@@ -139,6 +173,13 @@ def get_data(filters: dict | None = None) -> list[dict]:
 	designations = get_customer_designations([o.get("customer") for o in orders if o.get("customer")])
 	arcs_by_order = get_pending_arcs_by_sales_order(orders)
 	hours_by_project = get_labour_hours_by_project(project_names) if project_names else {}
+	manager_ids = list(
+		{
+			*(project_managers.values()),
+			*(o.get("custom_construction_manager") for o in orders if o.get("custom_construction_manager")),
+		}
+	)
+	user_names = get_user_full_names(manager_ids)
 	today = getdate(nowdate())
 	data = []
 	for order in orders:
@@ -148,7 +189,6 @@ def get_data(filters: dict | None = None) -> list[dict]:
 		per_billed = order.get("per_billed") or 0
 		remaining = total - (total * per_billed / 100)
 		project = order.get("project")
-		events_html = format_events_badges(events_by_project.get(project, []), today) if project else ""
 		so_name = order.get("name")
 		customer_designation = resolve_customer_display_name(
 			order.get("customer"),
@@ -166,31 +206,48 @@ def get_data(filters: dict | None = None) -> list[dict]:
 			or order.get("custom_construction_manager")
 			or ""
 		)
-		data.append({
-			"name": so_name,
-			"customer_name": customer_designation,
-			"status": order.get("status"),
-			"custom_construction_status": order.get("custom_construction_status"),
-			"pending_arcs": format_pending_arcs_html(arcs_by_order.get(so_name, []), today),
-			"evenements": events_html,
-			"reference_piece": order.get("reference_piece"),
-			"remaining_amount": remaining,
-			"total": total,
-			"delivery_date": order.get("delivery_date"),
-			"hours_total": hours_total,
-			"hours_solde": hours_solde,
-			"age": age,
-			"construction_manager": construction_manager,
-			# Hidden fields for get_indicator
-			"per_delivered": order.get("per_delivered"),
-			"skip_delivery_note": order.get("skip_delivery_note"),
-			"grand_total": order.get("grand_total"),
-			"custom_statut_fiche_de_travail": order.get("custom_statut_fiche_de_travail"),
-			"custom_per_received": order.get("custom_per_received"),
-			"custom_payment_request_status": order.get("custom_payment_request_status"),
-			"project": project,
-			"per_billed": per_billed,
-		})
+		pending_arcs = enrich_arcs(arcs_by_order.get(so_name, []), today)
+		events = enrich_events(events_by_project.get(project, []) if project else [], today)
+		data.append(
+			{
+				"name": so_name,
+				"customer_name": customer_designation,
+				"status": order.get("status"),
+				"custom_construction_status": order.get("custom_construction_status") or "",
+				"pending_arcs": pending_arcs,
+				"events": events,
+				"reference_piece": order.get("reference_piece"),
+				"remaining_amount": remaining,
+				"total": total,
+				"delivery_date": order.get("delivery_date"),
+				"hours_total": hours_total,
+				"hours_solde": hours_solde,
+				"age": age,
+				"construction_manager": construction_manager,
+				"construction_manager_name": user_names.get(construction_manager, construction_manager),
+				# Hidden fields for get_indicator
+				"per_delivered": order.get("per_delivered"),
+				"skip_delivery_note": order.get("skip_delivery_note"),
+				"grand_total": order.get("grand_total"),
+				"custom_statut_fiche_de_travail": order.get("custom_statut_fiche_de_travail"),
+				"custom_per_received": order.get("custom_per_received"),
+				"custom_payment_request_status": order.get("custom_payment_request_status"),
+				"project": project,
+				"per_billed": per_billed,
+			}
+		)
+	return data
+
+
+def get_data(filters: dict | None = None) -> list[dict]:
+	"""Script Report rows: structured carnet + HTML cells for ARC / events."""
+	today = getdate(nowdate())
+	data = []
+	for row in get_order_book_rows(filters):
+		report_row = dict(row)
+		report_row["pending_arcs"] = format_pending_arcs_html(row.get("pending_arcs"), today)
+		report_row["evenements"] = format_events_badges(row.get("events") or [], today)
+		data.append(report_row)
 	return data
 
 
@@ -232,11 +289,14 @@ def as_list(value) -> list:
 def get_projects_for_managers(managers: list[str]) -> list[str]:
 	if not managers:
 		return []
-	return frappe.get_all(
-		"Project",
-		filters={"custom_construction_manager": ["in", managers]},
-		pluck="name",
-	) or []
+	return (
+		frappe.get_all(
+			"Project",
+			filters={"custom_construction_manager": ["in", managers]},
+			pluck="name",
+		)
+		or []
+	)
 
 
 def get_project_managers(project_names: list[str]) -> dict[str, str]:
@@ -266,6 +326,51 @@ def order_matches_managers(order: dict, project_managers: dict[str, str], manage
 	if project_cm:
 		return project_cm in wanted
 	return order.get("custom_construction_manager") in wanted
+
+
+def get_user_full_names(user_ids: list[str]) -> dict[str, str]:
+	"""Map User.name → full_name (fallback to the id)."""
+	ids = list({u for u in user_ids if u})
+	if not ids:
+		return {}
+	rows = frappe.get_all(
+		"User",
+		filters={"name": ["in", ids]},
+		fields=["name", "full_name"],
+	)
+	return {r.get("name"): (r.get("full_name") or r.get("name")) for r in rows if r.get("name")}
+
+
+def enrich_arcs(purchase_orders: list[dict] | None, today=None) -> list[dict]:
+	"""Copy pending ARC dicts and flag overdue expected-receipt dates."""
+	if not purchase_orders:
+		return []
+	if today is None:
+		today = getdate(nowdate())
+	out = []
+	for po in purchase_orders:
+		schedule = po.get("schedule_date")
+		item = dict(po)
+		item["overdue"] = bool(schedule and getdate(schedule) < today)
+		item["ar_valide"] = 1 if po.get("ar_valide") else 0
+		out.append(item)
+	return out
+
+
+def enrich_events(events_list: list[dict] | None, today=None) -> list[dict]:
+	"""Copy Event dicts and add VT/Pose/other kind + past flag."""
+	if not events_list:
+		return []
+	if today is None:
+		today = getdate(nowdate())
+	out = []
+	for event in events_list:
+		starts_on = event.get("starts_on")
+		item = dict(event)
+		item["kind"] = event_kind(event)
+		item["past"] = bool(starts_on and getdate(starts_on) < today)
+		out.append(item)
+	return out
 
 
 def looks_like_accounting_code(name) -> bool:
@@ -463,13 +568,15 @@ def index_pending_arcs(
 		if not is_arc_pending(row):
 			return
 		seen[so_name].add(po_name)
-		by_so[so_name].append({
-			"name": po_name,
-			"supplier_name": row.get("supplier_name") or row.get("supplier") or po_name,
-			"schedule_date": row.get("schedule_date") or row.get("item_schedule_date"),
-			"ar_valide": row.get("ar_valide"),
-			"per_received": row.get("per_received") or 0,
-		})
+		by_so[so_name].append(
+			{
+				"name": po_name,
+				"supplier_name": row.get("supplier_name") or row.get("supplier") or po_name,
+				"schedule_date": row.get("schedule_date") or row.get("item_schedule_date"),
+				"ar_valide": row.get("ar_valide"),
+				"per_received": row.get("per_received") or 0,
+			}
+		)
 
 	for row in rows:
 		sales_order = (row.get("sales_order") or "").strip() if row.get("sales_order") else ""
@@ -482,7 +589,13 @@ def index_pending_arcs(
 				add(so_name, row)
 
 	for pos in by_so.values():
-		pos.sort(key=lambda po: (po.get("schedule_date") is None, po.get("schedule_date"), po.get("supplier_name") or ""))
+		pos.sort(
+			key=lambda po: (
+				po.get("schedule_date") is None,
+				po.get("schedule_date"),
+				po.get("supplier_name") or "",
+			)
+		)
 
 	return by_so
 
@@ -555,14 +668,16 @@ def get_events_by_project(project_names):
 		project = event.get("project")
 		if project not in by_project:
 			by_project[project] = []
-		by_project[project].append({
-			"name": event.get("name"),
-			"starts_on": event.get("starts_on"),
-			"color": event.get("color"),
-			"subject": event.get("subject"),
-			"custom_visite_technique": event.get("custom_visite_technique"),
-			"custom_fiche_de_travail": event.get("custom_fiche_de_travail"),
-		})
+		by_project[project].append(
+			{
+				"name": event.get("name"),
+				"starts_on": event.get("starts_on"),
+				"color": event.get("color"),
+				"subject": event.get("subject"),
+				"custom_visite_technique": event.get("custom_visite_technique"),
+				"custom_fiche_de_travail": event.get("custom_fiche_de_travail"),
+			}
+		)
 	return by_project
 
 
@@ -597,32 +712,62 @@ def format_events_badges(events_list, today=None) -> str:
 	return f'<div class="order-book-events" style="display:flex; flex-wrap:wrap; gap:2px;">{"".join(badges)}</div>'
 
 
-def build_summary(data: list[dict]) -> tuple[str, list[dict]]:
-	"""Chantiers-style cards + Frappe report_summary pills."""
+def summarize_rows(data: list[dict]) -> dict:
+	"""KPI totals from structured or Script Report rows."""
 	n = len(data)
 	remaining_ht = sum((row.get("remaining_amount") or 0) for row in data)
 	total_hours = sum((row.get("hours_total") or 0) for row in data)
 	solde_hours = sum((row.get("hours_solde") or 0) for row in data)
 	nb_arcs = 0
-	for row in data:
-		html = row.get("pending_arcs") or ""
-		# Each pending PO is one stacked <div> inside the cell.
-		if html:
-			nb_arcs += html.count("<div style=")
 	nb_events = 0
 	for row in data:
-		html = row.get("evenements") or ""
-		if html:
-			nb_events += html.count("order-book-event ")
+		arcs = row.get("pending_arcs")
+		if isinstance(arcs, list):
+			nb_arcs += len(arcs)
+		elif arcs:
+			# Each pending PO is one stacked <div> inside the report cell.
+			nb_arcs += str(arcs).count("<div style=")
+		events = row.get("events")
+		if isinstance(events, list):
+			nb_events += len(events)
+		else:
+			html = row.get("evenements") or ""
+			if html:
+				nb_events += html.count("order-book-event ")
+	return {
+		"nb_orders": n,
+		"remaining_ht": remaining_ht,
+		"hours_total": total_hours,
+		"hours_solde": solde_hours,
+		"nb_arcs": nb_arcs,
+		"nb_events": nb_events,
+	}
 
+
+def format_remaining_display(remaining_ht) -> str:
 	if remaining_ht >= 1_000_000:
-		reste_display = f"{round(remaining_ht / 1_000_000, 1)} M€"
-	elif remaining_ht >= 1000:
-		reste_display = f"{round(remaining_ht / 1000)} k€"
-	else:
-		reste_display = f"{round(remaining_ht)} €"
+		return f"{round(remaining_ht / 1_000_000, 1)} M€"
+	if remaining_ht >= 1000:
+		return f"{round(remaining_ht / 1000)} k€"
+	return f"{round(remaining_ht)} €"
+
+
+def build_summary(data: list[dict]) -> tuple[str, list[dict]]:
+	"""Chantiers-style cards + Frappe report_summary pills."""
+	s = summarize_rows(data)
+	n = s["nb_orders"]
+	remaining_ht = s["remaining_ht"]
+	total_hours = s["hours_total"]
+	solde_hours = s["hours_solde"]
+	nb_arcs = s["nb_arcs"]
+	nb_events = s["nb_events"]
+	reste_display = format_remaining_display(remaining_ht)
 
 	message = f"""
+	<div style="margin-bottom:12px;padding:10px 14px;border-radius:8px;background:#e3f2fd;color:#1565c0;font-size:13px;">
+		{_("Nouveau")} : <a href="/app/carnet-de-commande">{escape_html(_("ouvrir la page Carnet de commande"))}</a>
+		— {_("filtres et lignes enrichis. Ce rapport reste disponible.")}
+	</div>
 	<div style="display: flex; gap: 20px; margin-bottom: 15px; flex-wrap: wrap;">
 		<div style="background: #f5f5f5; border-radius: 8px; padding: 15px; min-width: 130px; text-align: center;">
 			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">Commandes</div>
