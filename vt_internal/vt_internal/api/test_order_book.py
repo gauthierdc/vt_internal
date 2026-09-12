@@ -108,7 +108,7 @@ def _structured_row(**overrides):
 
 class TestOrderBookApi(unittest.TestCase):
 	def test_serialize_row_is_json_friendly_no_html(self):
-		out = serialize_row(_structured_row())
+		out = serialize_row(_structured_row(), now=datetime(2026, 9, 9, 8, 0, tzinfo=PARIS_TZ))
 		self.assertEqual(out["customer_name"], "Miroiterie Avignon")
 		self.assertEqual(out["delivery_date"], "2026-09-20")
 		self.assertEqual(out["pending_arcs"][0]["schedule_date"], "2026-09-01")
