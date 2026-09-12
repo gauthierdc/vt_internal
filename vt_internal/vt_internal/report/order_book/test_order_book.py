@@ -15,11 +15,7 @@ if "frappe" not in sys.modules:
 
 	def _escape_html(value):
 		return (
-			str(value)
-			.replace("&", "&amp;")
-			.replace("<", "&lt;")
-			.replace(">", "&gt;")
-			.replace('"', "&quot;")
+			str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 		)
 
 	def _format_date(value, fmt="dd/MM/yyyy"):
@@ -49,21 +45,25 @@ if "frappe" not in sys.modules:
 	sys.modules["frappe"] = frappe
 	sys.modules["frappe.utils"] = frappe.utils
 
-from vt_internal.vt_internal.report.order_book.order_book import (  # noqa: E402
+from vt_internal.vt_internal.report.order_book.order_book import (
 	as_list,
 	build_summary,
+	enrich_arcs,
+	enrich_events,
 	event_kind,
 	format_events_badges,
 	format_pending_arcs_html,
 	get_columns,
 	get_customer_designations,
 	get_data,
+	get_order_book_rows,
 	index_pending_arcs,
 	is_arc_pending,
 	looks_like_accounting_code,
 	order_matches_managers,
 	parse_manager_filter,
 	resolve_customer_display_name,
+	summarize_rows,
 )
 
 VISIBLE_FIELDNAMES = [
@@ -116,9 +116,7 @@ def test_looks_like_accounting_code():
 
 def test_resolve_customer_display_name_prefers_live_designation():
 	designations = {"41100012": "Miroiterie Avignon *", "MIROITERIEAVIGNON2608": "Jean Dupont"}
-	assert (
-		resolve_customer_display_name("41100012", "41100012", designations) == "Miroiterie Avignon *"
-	)
+	assert resolve_customer_display_name("41100012", "41100012", designations) == "Miroiterie Avignon *"
 	assert (
 		resolve_customer_display_name("MIROITERIEAVIGNON2608", "Miroiterie Avignon SAS", designations)
 		== "Jean Dupont"
@@ -252,8 +250,18 @@ def test_index_pending_arcs_links_via_sales_order_and_project():
 def test_format_pending_arcs_html_supplier_date_and_overdue():
 	html = format_pending_arcs_html(
 		[
-			{"name": "ACH-00012", "supplier_name": "Saint-Gobain", "schedule_date": date(2026, 9, 15), "ar_valide": 1},
-			{"name": "ACH-00013", "supplier_name": "AGC Glass", "schedule_date": date(2026, 9, 1), "ar_valide": 0},
+			{
+				"name": "ACH-00012",
+				"supplier_name": "Saint-Gobain",
+				"schedule_date": date(2026, 9, 15),
+				"ar_valide": 1,
+			},
+			{
+				"name": "ACH-00013",
+				"supplier_name": "AGC Glass",
+				"schedule_date": date(2026, 9, 1),
+				"ar_valide": 0,
+			},
 		],
 		today=date(2026, 9, 9),
 	)
@@ -389,8 +397,10 @@ def test_get_data_uses_customer_designation_project_manager_and_hours():
 	mod.frappe.get_all = fake_get_all
 	mod.frappe.db.sql = fake_sql
 	mod.nowdate = lambda: date(2026, 9, 9)
-	mod.getdate = lambda d: d if isinstance(d, date) and not isinstance(d, datetime) else (
-		d.date() if isinstance(d, datetime) else date.fromisoformat(str(d)[:10])
+	mod.getdate = lambda d: (
+		d
+		if isinstance(d, date) and not isinstance(d, datetime)
+		else (d.date() if isinstance(d, datetime) else date.fromisoformat(str(d)[:10]))
 	)
 	try:
 		rows = get_data({})
@@ -413,6 +423,7 @@ def test_get_data_uses_customer_designation_project_manager_and_hours():
 	assert "🔍" in row["evenements"]
 	assert "order-book-event-vt" in row["evenements"]
 	assert row["age"] == 39
+	assert isinstance(row["pending_arcs"], str)
 
 
 def test_get_data_filters_multiple_construction_managers():
@@ -491,6 +502,132 @@ def test_build_summary_cards():
 	assert pills[0]["value"] == 1
 	assert pills[1]["value"] == 10
 	assert pills[2]["value"] == 1500
+	assert "carnet-de-commande" in message
+
+
+def test_summarize_rows_accepts_structured_lists():
+	s = summarize_rows(
+		[
+			{
+				"remaining_amount": 800,
+				"hours_total": 10,
+				"hours_solde": 7,
+				"pending_arcs": [{"name": "PO-1"}, {"name": "PO-2"}],
+				"events": [{"kind": "vt"}, {"kind": "ft"}],
+			}
+		]
+	)
+	assert s == {
+		"nb_orders": 1,
+		"remaining_ht": 800,
+		"hours_total": 10,
+		"hours_solde": 7,
+		"nb_arcs": 2,
+		"nb_events": 2,
+	}
+
+
+def test_enrich_arcs_and_events_add_flags():
+	arcs = enrich_arcs(
+		[
+			{"name": "PO-1", "supplier_name": "AGC", "schedule_date": date(2026, 9, 1), "ar_valide": 0},
+			{"name": "PO-2", "supplier_name": "SG", "schedule_date": date(2026, 9, 15), "ar_valide": 1},
+		],
+		today=date(2026, 9, 9),
+	)
+	assert arcs[0]["overdue"] is True
+	assert arcs[0]["ar_valide"] == 0
+	assert arcs[1]["overdue"] is False
+	assert enrich_arcs([]) == []
+
+	events = enrich_events(
+		[
+			{"name": "EV-1", "starts_on": datetime(2026, 9, 1, 8, 0), "custom_visite_technique": "VT-1"},
+			{"name": "EV-2", "starts_on": datetime(2026, 9, 12, 9, 0), "custom_fiche_de_travail": "FT-1"},
+		],
+		today=date(2026, 9, 9),
+	)
+	assert events[0]["kind"] == "vt" and events[0]["past"] is True
+	assert events[1]["kind"] == "ft" and events[1]["past"] is False
+	assert enrich_events([]) == []
+
+
+def test_get_order_book_rows_returns_structured_not_html():
+	sales_orders = [_sample_order()]
+	customers = [{"name": "41100012", "customer_name": "Miroiterie Avignon *"}]
+	projects = [{"name": "PROJ-1", "custom_construction_manager": "alice@example.com"}]
+	events = [
+		{
+			"name": "EV-1",
+			"project": "PROJ-1",
+			"starts_on": datetime(2026, 9, 12, 9, 0),
+			"ends_on": datetime(2026, 9, 12, 11, 0),
+			"color": None,
+			"subject": "VT",
+			"custom_visite_technique": "VT-1",
+			"custom_fiche_de_travail": None,
+		}
+	]
+
+	import vt_internal.vt_internal.report.order_book.order_book as mod
+
+	orig_get_list = mod.frappe.get_list
+	orig_get_all = mod.frappe.get_all
+	orig_sql = mod.frappe.db.sql
+	orig_nowdate = mod.nowdate
+	orig_getdate = mod.getdate
+
+	def fake_get_list(doctype, *args, **kwargs):
+		if doctype == "Sales Order":
+			return sales_orders
+		if doctype == "Customer":
+			return customers
+		if doctype == "Event":
+			return events
+		return []
+
+	def fake_get_all(doctype, *args, **kwargs):
+		if doctype == "Project":
+			if kwargs.get("pluck") == "name":
+				return ["PROJ-1"]
+			return projects
+		if doctype == "User":
+			return [{"name": "alice@example.com", "full_name": "Alice Martin"}]
+		return []
+
+	def fake_sql(query, *args, **kwargs):
+		if "tabTimesheet" in query:
+			return [{"project": "PROJ-1", "hours": 3}]
+		if "tabSales Order" in query and "custom_labour_hours" in query:
+			return [{"project": "PROJ-1", "hours": 10}]
+		return []
+
+	mod.frappe.get_list = fake_get_list
+	mod.frappe.get_all = fake_get_all
+	mod.frappe.db.sql = fake_sql
+	mod.nowdate = lambda: date(2026, 9, 9)
+	mod.getdate = lambda d: (
+		d
+		if isinstance(d, date) and not isinstance(d, datetime)
+		else (d.date() if isinstance(d, datetime) else date.fromisoformat(str(d)[:10]))
+	)
+	try:
+		rows = get_order_book_rows({})
+	finally:
+		mod.frappe.get_list = orig_get_list
+		mod.frappe.get_all = orig_get_all
+		mod.frappe.db.sql = orig_sql
+		mod.nowdate = orig_nowdate
+		mod.getdate = orig_getdate
+
+	assert len(rows) == 1
+	row = rows[0]
+	assert isinstance(row["pending_arcs"], list)
+	assert isinstance(row["events"], list)
+	assert "<div" not in str(row["pending_arcs"])
+	assert row["events"][0]["kind"] == "vt"
+	assert row["construction_manager_name"] == "Alice Martin"
+	assert row["customer_name"] == "Miroiterie Avignon *"
 
 
 class TestOrderBook(unittest.TestCase):
@@ -535,6 +672,15 @@ class TestOrderBook(unittest.TestCase):
 
 	def test_build_summary_cards(self):
 		test_build_summary_cards()
+
+	def test_summarize_rows_accepts_structured_lists(self):
+		test_summarize_rows_accepts_structured_lists()
+
+	def test_enrich_arcs_and_events_add_flags(self):
+		test_enrich_arcs_and_events_add_flags()
+
+	def test_get_order_book_rows_returns_structured_not_html(self):
+		test_get_order_book_rows_returns_structured_not_html()
 
 
 if __name__ == "__main__":

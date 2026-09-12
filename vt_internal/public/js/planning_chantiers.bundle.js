@@ -85,6 +85,9 @@ class PlanningChantiersView {
 	setup_actions() {
 		this.page.set_primary_action(__("Rafraîchir"), () => this.reload(), "refresh");
 		this.page.add_menu_item(__("Exporter en CSV"), () => this.export_csv());
+		this.page.add_menu_item(__("Ouvrir le carnet de commande"), () =>
+			frappe.set_route("carnet-de-commande")
+		);
 		this.page.add_menu_item(__("Ouvrir l'ancien rapport (Order book)"), () =>
 			frappe.set_route("query-report", "Order book")
 		);

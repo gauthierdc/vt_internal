@@ -76,6 +76,9 @@ class ChantiersView {
 			"refresh"
 		);
 		this.page.add_menu_item(__("Exporter en CSV"), () => this.export_csv());
+		this.page.add_menu_item(__("Ouvrir le carnet de commande"), () =>
+			frappe.set_route("carnet-de-commande")
+		);
 		this.page.add_menu_item(__("Ouvrir l'ancien rapport"), () =>
 			frappe.set_route("query-report", "👷Chantiers")
 		);
