@@ -1,61 +1,162 @@
 # Copyright (c) 2025, Verre & Transparence and contributors
 # For license information, please see license.txt
 
+from collections import defaultdict
+
 import frappe
+
+
+def _matches_analysis_axis(custom_pose_vt, analysis_axis):
+    """True if an Item's custom_pose_vt flag belongs to the requested axis."""
+    is_pose = bool(custom_pose_vt)
+    if analysis_axis == "Temps passé":
+        return is_pose
+    if analysis_axis == "Achats":
+        return not is_pose
+    return True
+
+
+def _line_cost(qty, unit_cost):
+    return (qty or 0) * (unit_cost or 0)
+
+
+def compute_theoretical(sales_order_items, packed_items, analysis_axis="global"):
+    """
+    Theoretical (vente, cost) from Sales Order lines and Packed Item children.
+
+    Vente uses Sales Order Item.amount, including Product Bundle **parent** lines.
+    Packed Item.rate is never added to vente: those rates are internal and do not
+    split the parent sell price (CC-2607-025: parent 2300.73 vs packed qty×rate ~7623).
+
+    Cost prefers packed qty×base_unit_cost_price for bundles, plus
+    qty×base_unit_cost_price on non-bundle SOI lines. If a bundle has no packed
+    cost, fall back to the parent line cost so we neither drop nor double-count it.
+
+    analysis_axis ("Temps passé" / "Achats" / anything else = global) filters via
+    Item.custom_pose_vt on the relevant lines: SOI for vente and non-bundle cost,
+    packed children for bundle cost.
+    """
+    packed_by_soi = defaultdict(list)
+    for packed in packed_items or []:
+        packed_by_soi[packed.get("parent_detail_docname")].append(packed)
+
+    total_vente = 0.0
+    total_cost = 0.0
+
+    for soi in sales_order_items or []:
+        soi_matches = _matches_analysis_axis(soi.get("custom_pose_vt"), analysis_axis)
+        if soi_matches:
+            total_vente += soi.get("amount") or 0
+
+        soi_cost = _line_cost(soi.get("qty"), soi.get("base_unit_cost_price"))
+        is_bundle = bool(soi.get("product_bundle_name"))
+        if not is_bundle:
+            if soi_matches:
+                total_cost += soi_cost
+            continue
+
+        children = packed_by_soi.get(soi.get("name")) or []
+        packed_cost_all = sum(
+            _line_cost(child.get("qty"), child.get("base_unit_cost_price")) for child in children
+        )
+        if packed_cost_all:
+            total_cost += sum(
+                _line_cost(child.get("qty"), child.get("base_unit_cost_price"))
+                for child in children
+                if _matches_analysis_axis(child.get("custom_pose_vt"), analysis_axis)
+            )
+        elif soi_matches:
+            total_cost += soi_cost
+
+    return total_vente, total_cost
+
+
+def _fetch_theoretical_source_rows(projects):
+    """Submitted Sales Order Item + Packed Item rows for the given projects."""
+    if not projects:
+        return [], []
+    if isinstance(projects, str):
+        projects = [projects]
+
+    placeholders = ", ".join(["%s"] * len(projects))
+    params = tuple(projects)
+
+    sales_order_items = frappe.db.sql(
+        f"""
+        SELECT
+            so.project AS project,
+            soi.name,
+            soi.amount,
+            soi.qty,
+            soi.base_unit_cost_price,
+            soi.product_bundle_name,
+            i.custom_pose_vt
+        FROM `tabSales Order Item` soi
+        INNER JOIN `tabSales Order` so ON so.name = soi.parent
+        INNER JOIN `tabItem` i ON i.name = soi.item_code
+        WHERE so.project IN ({placeholders})
+        AND so.docstatus = 1
+        AND so.custom_exclude_from_statistics != 1
+        """,
+        params,
+        as_dict=1,
+    )
+
+    packed_items = frappe.db.sql(
+        f"""
+        SELECT
+            so.project AS project,
+            pi.parent_detail_docname,
+            pi.qty,
+            pi.base_unit_cost_price,
+            i.custom_pose_vt
+        FROM `tabPacked Item` pi
+        INNER JOIN `tabSales Order` so ON so.name = pi.parent AND pi.parenttype = 'Sales Order'
+        INNER JOIN `tabItem` i ON i.name = pi.item_code
+        WHERE so.project IN ({placeholders})
+        AND so.docstatus = 1
+        AND so.custom_exclude_from_statistics != 1
+        """,
+        params,
+        as_dict=1,
+    )
+
+    return sales_order_items or [], packed_items or []
 
 
 def get_theoretical(project, analysis_axis):
     """
     Calcule les ventes et coûts théoriques d'un projet basé sur les Sales Order Items.
-    
+
     Args:
         project: Le nom du projet
         analysis_axis: "Temps passé", "Achats", ou autre pour global
-        
+
     Returns:
         tuple: (total_vente, total_cost)
     """
-    params = {"project": project}
-    item_group_condition = ""
+    sales_order_items, packed_items = _fetch_theoretical_source_rows([project])
+    return compute_theoretical(sales_order_items, packed_items, analysis_axis)
 
-    if analysis_axis == "Temps passé":
-        item_group_condition = "AND i.custom_pose_vt = 1"
-    elif analysis_axis == "Achats":
-        item_group_condition = "AND NOT i.custom_pose_vt = 1"
 
-    # Récupération des ventes et coûts des lignes NON bundles
-    regular_items = frappe.db.sql(f"""
-        SELECT 
-            SUM(soi.amount) AS vente,
-            SUM(soi.qty * COALESCE(soi.base_unit_cost_price, 0)) AS cost
-        FROM `tabSales Order Item` soi
-        INNER JOIN `tabSales Order` so ON so.name = soi.parent
-        INNER JOIN `tabItem` i ON i.name = soi.item_code
-        WHERE so.project = %(project)s
-        AND so.docstatus = 1
-        AND so.custom_exclude_from_statistics != 1
-        AND COALESCE(soi.product_bundle_name, '') = ''
-        {item_group_condition}
-    """, params, as_dict=1)[0]
+def get_theoretical_map(projects, analysis_axis="global"):
+    """Batch (vente, cost) per project — same rules as get_theoretical."""
+    sales_order_items, packed_items = _fetch_theoretical_source_rows(projects)
+    soi_by_project = defaultdict(list)
+    packed_by_project = defaultdict(list)
+    for row in sales_order_items:
+        soi_by_project[row.get("project")].append(row)
+    for row in packed_items:
+        packed_by_project[row.get("project")].append(row)
 
-    # Récupération des packed_items (enfants des bundles)
-    packed_items = frappe.db.sql(f"""
-        SELECT 
-            SUM(pi.qty * pi.rate) AS vente,
-            SUM(pi.qty * COALESCE(pi.base_unit_cost_price, 0)) AS cost
-        FROM `tabPacked Item` pi
-        INNER JOIN `tabSales Order` so ON so.name = pi.parent AND pi.parenttype = 'Sales Order'
-        INNER JOIN `tabItem` i ON i.name = pi.item_code
-        WHERE so.project = %(project)s
-        AND so.docstatus = 1
-        AND so.custom_exclude_from_statistics != 1
-        {item_group_condition}
-    """, params, as_dict=1)[0]
-
-    total_vente = (regular_items.vente or 0) + (packed_items.vente or 0)
-    total_cost = (regular_items.cost or 0) + (packed_items.cost or 0)
-
-    return total_vente, total_cost
+    return {
+        name: compute_theoretical(
+            soi_by_project.get(name, []),
+            packed_by_project.get(name, []),
+            analysis_axis,
+        )
+        for name in projects
+    }
 
 
 def get_project_costs(project_name):

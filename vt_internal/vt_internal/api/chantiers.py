@@ -16,7 +16,7 @@ import json
 
 import frappe
 
-from vt_internal.vt_internal.utils.margin_utils import calculate_margin
+from vt_internal.vt_internal.utils.margin_utils import calculate_margin, get_theoretical_map
 
 # Types d'activité exclus du "temps chantier" (temps atelier / logistique).
 EXCLUDED_ACTIVITIES = ("Fabrication", "Livraison")
@@ -461,34 +461,10 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		):
 			meta_map[r.name] = r
 
-		# Ventes/coûts théoriques par projet (Sales Order Items + Packed Items) —
-		# remplace get_theoretical. Somme sur tous les axes (= marge globale).
-		def _accum_theo(sql_rows):
-			for r in sql_rows:
-				e = theo_map.setdefault(r.project, {"vente": 0.0, "cost": 0.0})
-				e["vente"] += (r.vente or 0)
-				e["cost"] += (r.cost or 0)
-		_accum_theo(frappe.db.sql(
-			f"""
-			SELECT so.project AS project, SUM(soi.amount) AS vente,
-			       SUM(soi.qty * COALESCE(soi.base_unit_cost_price, 0)) AS cost
-			FROM `tabSales Order Item` soi
-			JOIN `tabSales Order` so ON so.name = soi.parent
-			WHERE so.project IN ({ph}) AND so.docstatus = 1
-			  AND so.custom_exclude_from_statistics != 1
-			  AND COALESCE(soi.product_bundle_name, '') = ''
-			GROUP BY so.project
-			""", tuple(project_names), as_dict=True))
-		_accum_theo(frappe.db.sql(
-			f"""
-			SELECT so.project AS project, SUM(pi.qty * pi.rate) AS vente,
-			       SUM(pi.qty * COALESCE(pi.base_unit_cost_price, 0)) AS cost
-			FROM `tabPacked Item` pi
-			JOIN `tabSales Order` so ON so.name = pi.parent AND pi.parenttype = 'Sales Order'
-			WHERE so.project IN ({ph}) AND so.docstatus = 1
-			  AND so.custom_exclude_from_statistics != 1
-			GROUP BY so.project
-			""", tuple(project_names), as_dict=True))
+		# Ventes/coûts théoriques par projet — même règle que get_theoretical
+		# (vente = SOI.amount y compris parents bundle, pas packed qty×rate).
+		for name, (vente, cost) in get_theoretical_map(project_names).items():
+			theo_map[name] = {"vente": vente, "cost": cost}
 
 		# Coûts réels : commandes fournisseur + fabrications (tout l'historique)
 		for r in frappe.db.sql(
