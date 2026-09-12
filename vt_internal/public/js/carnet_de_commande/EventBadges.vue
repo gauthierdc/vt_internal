@@ -1,10 +1,10 @@
 <template>
-	<div class="vcc-events" v-if="events.length">
+	<div class="vcc-events" v-if="visible.length">
 		<button
-			v-for="ev in events"
+			v-for="ev in visible"
 			:key="ev.name"
 			class="vcc-ev"
-			:class="[ev.kind, { past: ev.past }]"
+			:class="ev.kind"
 			:style="badgeStyle(ev)"
 			:data-tip="evTip(ev)"
 			@click.stop="$emit('open', ev.name)"
@@ -18,12 +18,17 @@
 </template>
 
 <script>
-import { EVENT_KIND_META, fmtDateShort } from "./helpers.js";
+import { EVENT_KIND_META, fmtDateShort, futureEvents } from "./helpers.js";
 
 export default {
 	name: "EventBadges",
 	props: { events: { type: Array, default: () => [] } },
 	emits: ["open"],
+	computed: {
+		visible() {
+			return futureEvents(this.events);
+		},
+	},
 	methods: {
 		fmtDateShort,
 		meta(ev) {
@@ -48,7 +53,6 @@ export default {
 	border: none; border-radius: 999px; padding: 2px 8px;
 	font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit;
 }
-.vcc-ev.past { opacity: .55; }
 .vcc-ev:hover { filter: brightness(.94); }
 .vcc-muted { color: var(--text-muted, #9aa4ad); }
 </style>

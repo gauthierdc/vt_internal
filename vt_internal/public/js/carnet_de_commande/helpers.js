@@ -19,6 +19,22 @@ export const ORDER_STATUS_COLORS = {
 	grey: { color: "#6c7680", bg: "rgba(120,130,140,.14)" },
 };
 
+// Ordre canonique des statuts internes (pills colonne Statut / sales_order_list).
+export const INTERNAL_STATUS_ORDER = [
+	"À fabriquer",
+	"En fabrication",
+	"À livrer",
+	"En BL",
+	"Chantier à planifier",
+	"Chantier à faire",
+	"Chantier en cours",
+	"CH fait à facturer",
+	"🕦 Acompte",
+	"On Hold",
+	"Closed",
+	"Terminé",
+];
+
 // Reproduit l'indicateur de la liste des commandes clients (sales_order_list.js).
 export function salesOrderStatus(so) {
 	if (!so) return null;
@@ -40,6 +56,100 @@ export function salesOrderStatus(so) {
 	if (del < 100 && billed < 100 && fiche === "Fait") return R(__("CH fait à facturer"), "red");
 	if (rec === 0) return R(__("À fabriquer"), "green");
 	return R(so.status || "", "gray");
+}
+
+export function rowStatusLabel(row) {
+	const s = salesOrderStatus(row);
+	return s ? s.label : "";
+}
+
+export function uniqueInternalStatusOptions(rows) {
+	const present = new Set((rows || []).map(rowStatusLabel).filter(Boolean));
+	const options = [];
+	const seen = new Set();
+	INTERNAL_STATUS_ORDER.forEach((key) => {
+		const label = typeof __ === "function" ? __(key) : key;
+		if ((present.has(label) || present.has(key)) && !seen.has(label)) {
+			options.push({ value: present.has(label) ? label : key, label: present.has(label) ? label : key });
+			seen.add(options[options.length - 1].value);
+		}
+	});
+	[...present]
+		.filter((label) => !seen.has(label))
+		.sort((a, b) => a.localeCompare(b, "fr"))
+		.forEach((label) => options.push({ value: label, label }));
+	return options;
+}
+
+export function filterRowsByInternalStatuses(rows, statuses) {
+	if (!statuses || !statuses.length) return rows;
+	const set = new Set(statuses);
+	return (rows || []).filter((r) => set.has(rowStatusLabel(r)));
+}
+
+function parseNaiveParis(raw) {
+	if (raw == null || raw === "") return null;
+	const m = String(raw)
+		.trim()
+		.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+	if (!m) return null;
+	return {
+		y: +m[1],
+		mo: +m[2],
+		d: +m[3],
+		h: +(m[4] || 0),
+		mi: +(m[5] || 0),
+		s: +(m[6] || 0),
+		hasTime: Boolean(m[4]),
+	};
+}
+
+function parisParts(ref) {
+	const fmt = new Intl.DateTimeFormat("en-GB", {
+		timeZone: "Europe/Paris",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+		second: "2-digit",
+		hour12: false,
+	});
+	const parts = {};
+	fmt.formatToParts(ref).forEach((p) => {
+		if (p.type !== "literal") parts[p.type] = p.value;
+	});
+	return {
+		y: +parts.year,
+		mo: +parts.month,
+		d: +parts.day,
+		h: +parts.hour,
+		mi: +parts.minute,
+		s: +parts.second,
+	};
+}
+
+export function isFutureEvent(ev, now) {
+	if (!ev) return false;
+	if (ev.past === true) return false;
+	const parsed = parseNaiveParis(ev.starts_on);
+	if (!parsed) return false;
+	const ref = parisParts(now instanceof Date ? now : new Date());
+	if (!parsed.hasTime) {
+		if (parsed.y !== ref.y) return parsed.y > ref.y;
+		if (parsed.mo !== ref.mo) return parsed.mo > ref.mo;
+		return parsed.d >= ref.d;
+	}
+	const a = [parsed.y, parsed.mo, parsed.d, parsed.h, parsed.mi, parsed.s];
+	const b = [ref.y, ref.mo, ref.d, ref.h, ref.mi, ref.s];
+	for (let i = 0; i < 6; i++) {
+		if (a[i] !== b[i]) return a[i] > b[i];
+	}
+	return true;
+}
+
+export function futureEvents(events, now) {
+	return (events || []).filter((ev) => isFutureEvent(ev, now));
 }
 
 export const fmtMoney = (n) =>

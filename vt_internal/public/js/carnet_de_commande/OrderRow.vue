@@ -4,8 +4,9 @@
 			<a href="#" @click.prevent="openDesignation">{{ row.name }}</a>
 		</td>
 		<td class="vcc-client" :data-tip="row.customer_name">{{ row.customer_name }}</td>
+		<td class="vcc-nowrap">{{ fmtDate(row.delivery_date) || '—' }}</td>
 		<td>
-			<span class="vcc-pill" :style="statusStyle">{{ statusLabel }}</span>
+			<span class="vcc-pill" :style="statusStyle" :data-tip="__('Statut interne VT (même indicateur que la liste des commandes)')">{{ statusLabel }}</span>
 		</td>
 		<td>
 			<button
@@ -24,7 +25,6 @@
 		<td class="vcc-ref">{{ row.reference_piece || '—' }}</td>
 		<td class="num">{{ fmtMoney(row.remaining_amount) }}</td>
 		<td class="num">{{ fmtMoney(row.total) }}</td>
-		<td class="vcc-nowrap">{{ fmtDate(row.delivery_date) || '—' }}</td>
 		<td class="num">{{ fmtHours(row.hours_total) }}</td>
 		<td class="num">
 			<span :class="'vcc-hsolde ' + hoursTone(row.hours_solde)">{{ fmtHours(row.hours_solde) }}</span>

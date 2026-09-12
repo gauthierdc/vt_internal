@@ -6,8 +6,17 @@
 
 import { createApp, reactive } from "vue";
 import CarnetApp from "./carnet_de_commande/CarnetApp.vue";
+import { rowStatusLabel } from "./carnet_de_commande/helpers.js";
 
 const API = "vt_internal.vt_internal.api.order_book.get_order_book";
+
+function parseStatusParam(raw) {
+	if (!raw) return [];
+	return raw
+		.split(",")
+		.map((s) => s.trim())
+		.filter(Boolean);
+}
 
 function readUrlFilters() {
 	const q = new URLSearchParams(window.location.search);
@@ -15,7 +24,8 @@ function readUrlFilters() {
 	if (q.get("company")) f.company = q.get("company");
 	if (q.get("cm")) f.conducteurs = q.get("cm").split(",").filter(Boolean);
 	if (q.get("cc")) f.cost_center = q.get("cc");
-	if (q.get("status")) f.status = q.get("status");
+	const statuses = parseStatusParam(q.get("status"));
+	if (statuses.length) f.statuses = statuses;
 	return f;
 }
 
@@ -31,12 +41,13 @@ class CarnetDeCommandeView {
 				company: null,
 				conducteurs: [],
 				cost_center: null,
-				status: null,
+				statuses: [],
 				...readUrlFilters(),
 			},
 			openProject: (name) => window.openProjectDetails(name),
 			openDoc: (dt, name) => frappe.set_route("Form", dt, name),
 			reload: () => this.reload(),
+			syncUrl: () => this.syncUrl(),
 		});
 
 		this.setup_filters();
@@ -66,7 +77,7 @@ class CarnetDeCommandeView {
 		if (f.company) q.set("company", f.company);
 		if (f.conducteurs && f.conducteurs.length) q.set("cm", f.conducteurs.join(","));
 		if (f.cost_center) q.set("cc", f.cost_center);
-		if (f.status) q.set("status", f.status);
+		if (f.statuses && f.statuses.length) q.set("status", f.statuses.join(","));
 		const qs = q.toString();
 		window.history.replaceState(
 			window.history.state,
@@ -87,7 +98,6 @@ class CarnetDeCommandeView {
 				cost_center: f.cost_center || undefined,
 				construction_managers:
 					f.conducteurs && f.conducteurs.length ? JSON.stringify(f.conducteurs) : undefined,
-				status: f.status || undefined,
 			},
 			callback: (r) => {
 				if (r && r.message) this.store.data = r.message;
@@ -109,12 +119,12 @@ class CarnetDeCommandeView {
 		const cols = [
 			["name", "Désignation"],
 			["customer_name", "Client"],
-			["status", "Statut"],
+			["delivery_date", "Date de livraison"],
+			["internal_status", "Statut"],
 			["custom_construction_status", "Statut du chantier"],
 			["reference_piece", "Référence"],
 			["remaining_amount", "Reste à facturer"],
 			["total", "Total HT"],
-			["delivery_date", "Date de livraison"],
 			["hours_total", "Heures total"],
 			["hours_solde", "Heures solde"],
 			["age", "Age"],
@@ -128,7 +138,11 @@ class CarnetDeCommandeView {
 				esc((row.pending_arcs || []).map((a) => a.supplier_name).join(" | ")),
 				esc((row.events || []).map((e) => e.kind).join(" | ")),
 			];
-			lines.push(cols.map((c) => esc(row[c[0]])).join(",") + "," + extra.join(","));
+			const values = cols.map((c) => {
+				if (c[0] === "internal_status") return esc(row.internal_status || rowStatusLabel(row));
+				return esc(row[c[0]]);
+			});
+			lines.push(values.join(",") + "," + extra.join(","));
 		});
 		const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
 		const url = URL.createObjectURL(blob);
