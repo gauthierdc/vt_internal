@@ -68,16 +68,26 @@
 
 			<div class="vcc-toolbar">
 				<input class="vcc-search" v-model="search" :placeholder="__('Rechercher une commande, un client, une référence…')" />
-				<DropSelect
-					icon="🏷️"
-					v-model="facetStatus"
-					:all-label="__('Tous les statuts')"
-					:options="statusOptions"
-				/>
-				<div class="vcc-seg">
-					<button :class="{ active: facChantier === '' }" @click="facChantier = ''">{{ __('Chantier') }}</button>
-					<button :class="{ active: facChantier === 'set' }" @click="facChantier = 'set'">{{ __('Statut renseigné') }}</button>
-					<button :class="{ active: facChantier === 'empty' }" @click="facChantier = 'empty'">{{ __('Sans statut') }}</button>
+				<div class="vcc-ms" :data-tip="__('Statuts internes de la colonne Statut (à fabriquer, chantier à faire, en fabrication…) — pas les statuts ERP.')">
+					<button class="vcc-ms-btn" :class="{ on: selectedStatuses.length }" @click="statusOpen = !statusOpen">
+						🏷️ {{ statusFilterLabel }} <span class="caret">▾</span>
+					</button>
+					<template v-if="statusOpen">
+						<div class="vcc-ms-backdrop" @click="statusOpen = false"></div>
+						<div class="vcc-ms-pop">
+							<label class="vcc-ms-opt all" @click="clearStatuses">{{ __('Tous les statuts internes') }}</label>
+							<label class="vcc-ms-opt" v-for="s in statusOptions" :key="s.value">
+								<input type="checkbox" :value="s.value" v-model="selectedStatuses" @change="applyStatuses" />
+								{{ s.label }}
+							</label>
+							<div v-if="!statusOptions.length" class="vcc-ms-empty">{{ __('Aucun statut interne') }}</div>
+						</div>
+					</template>
+				</div>
+				<div class="vcc-seg" :data-tip="__('Filtre le champ libre « Statut du chantier », pas le statut interne de la colonne Statut.')">
+					<button :class="{ active: facChantier === '' }" @click="facChantier = ''">{{ __('Tous') }}</button>
+					<button :class="{ active: facChantier === 'set' }" @click="facChantier = 'set'">{{ __('Statut chantier renseigné') }}</button>
+					<button :class="{ active: facChantier === 'empty' }" @click="facChantier = 'empty'">{{ __('Sans statut chantier') }}</button>
 				</div>
 				<div class="vcc-flux-filter">
 					<button
@@ -98,14 +108,14 @@
 						<tr>
 							<th @click="sortBy('name')" class="sortable">{{ __('Désignation') }} <SortIc :dir="sortDir" :on="sortKey === 'name'" /></th>
 							<th @click="sortBy('customer_name')" class="sortable">{{ __('Client') }} <SortIc :dir="sortDir" :on="sortKey === 'customer_name'" /></th>
-							<th @click="sortBy('status')" class="sortable">{{ __('Statut') }} <SortIc :dir="sortDir" :on="sortKey === 'status'" /></th>
-							<th @click="sortBy('custom_construction_status')" class="sortable">{{ __('Statut du chantier') }} <SortIc :dir="sortDir" :on="sortKey === 'custom_construction_status'" /></th>
+							<th @click="sortBy('delivery_date')" class="sortable">{{ __('Date de livraison') }} <SortIc :dir="sortDir" :on="sortKey === 'delivery_date'" /></th>
+							<th @click="sortBy('status')" class="sortable" :data-tip="__('Statut interne VT (à fabriquer, en fabrication, chantier à faire…) — celui du filtre Statuts.')">{{ __('Statut') }} <SortIc :dir="sortDir" :on="sortKey === 'status'" /></th>
+							<th @click="sortBy('custom_construction_status')" class="sortable" :data-tip="__('Note libre sur la commande (pas le statut interne).')">{{ __('Statut du chantier') }} <SortIc :dir="sortDir" :on="sortKey === 'custom_construction_status'" /></th>
 							<th @click="sortBy('nb_arcs')" class="sortable" :data-tip="__('Commandes fournisseur soumises, non entièrement reçues. Date = réception prévue. Rouge = en retard.')">{{ __('ARC en cours et date de réception') }} <SortIc :dir="sortDir" :on="sortKey === 'nb_arcs'" /></th>
-							<th @click="sortBy('nb_events')" class="sortable" :data-tip="__('VT (visite technique) · Pose (fiche de travail) · autres événements. Les dates passées sont estompées.')">{{ __('Événements') }} <SortIc :dir="sortDir" :on="sortKey === 'nb_events'" /></th>
+							<th @click="sortBy('nb_events')" class="sortable" :data-tip="__('VT (visite technique) · Pose (fiche de travail) · autres événements. Seuls les événements à venir (Europe/Paris) sont affichés.')">{{ __('Événements') }} <SortIc :dir="sortDir" :on="sortKey === 'nb_events'" /></th>
 							<th @click="sortBy('reference_piece')" class="sortable">{{ __('Référence') }} <SortIc :dir="sortDir" :on="sortKey === 'reference_piece'" /></th>
 							<th @click="sortBy('remaining_amount')" class="sortable num">{{ __('Reste à facturer') }} <SortIc :dir="sortDir" :on="sortKey === 'remaining_amount'" /></th>
 							<th @click="sortBy('total')" class="sortable num">{{ __('Total HT') }} <SortIc :dir="sortDir" :on="sortKey === 'total'" /></th>
-							<th @click="sortBy('delivery_date')" class="sortable">{{ __('Date de livraison') }} <SortIc :dir="sortDir" :on="sortKey === 'delivery_date'" /></th>
 							<th @click="sortBy('hours_total')" class="sortable num">{{ __("h total") }} <SortIc :dir="sortDir" :on="sortKey === 'hours_total'" /></th>
 							<th @click="sortBy('hours_solde')" class="sortable num">{{ __("h solde") }} <SortIc :dir="sortDir" :on="sortKey === 'hours_solde'" /></th>
 							<th @click="sortBy('age')" class="sortable num">{{ __('Age') }} <SortIc :dir="sortDir" :on="sortKey === 'age'" /></th>
@@ -143,12 +153,12 @@
 							<td>{{ totals.count }} {{ __('commandes') }}</td>
 							<td></td>
 							<td></td>
+							<td></td>
 							<td>{{ totals.arcs }} {{ __('ARC') }}</td>
 							<td>{{ totals.events }} {{ __('évt.') }}</td>
 							<td></td>
 							<td class="num">{{ fmtMoney(totals.reste) }}</td>
 							<td class="num">{{ fmtMoney(totals.total) }}</td>
-							<td></td>
 							<td class="num">{{ Math.round(totals.hTotal) }}</td>
 							<td class="num">{{ Math.round(totals.hSolde) }}</td>
 							<td></td>
@@ -163,7 +173,9 @@
 				<span class="vcc-leg ft">📋 {{ __('Pose') }}</span>
 				<span class="vcc-leg ev">📅 {{ __('Autre événement') }}</span>
 				<span class="vcc-leg overdue">{{ __('Date rouge') }} = {{ __('réception prévue dépassée') }}</span>
+				<span class="vcc-leg">{{ __('Événements') }} = {{ __('à venir uniquement (Europe/Paris)') }}</span>
 				<span class="vcc-leg">{{ __('Client') }} = {{ __('vrai nom (jamais le code comptable)') }}</span>
+				<span class="vcc-leg">{{ __('Statut') }} = {{ __('statut interne VT') }} · {{ __('Statut du chantier') }} = {{ __('note libre') }}</span>
 			</div>
 		</template>
 	</div>
@@ -173,7 +185,14 @@
 import { h } from "vue";
 import OrderRow from "./OrderRow.vue";
 import DropSelect from "./DropSelect.vue";
-import { fmtMoney, fmtCompact } from "./helpers.js";
+import {
+	fmtMoney,
+	fmtCompact,
+	futureEvents,
+	uniqueInternalStatusOptions,
+	filterRowsByInternalStatuses,
+	rowStatusLabel,
+} from "./helpers.js";
 
 const SortIc = (props) =>
 	h("span", { class: "vcc-sortic" + (props.on ? " on" : "") }, props.on ? (props.dir === 1 ? "▲" : "▼") : "⇅");
@@ -186,7 +205,8 @@ export default {
 	data() {
 		return {
 			search: "",
-			facetStatus: "",
+			selectedStatuses: [...(this.store.filters.statuses || [])],
+			statusOpen: false,
 			facChantier: "",
 			onlyArc: false,
 			onlyOverdueArc: false,
@@ -215,14 +235,27 @@ export default {
 			return this.data.meta.cost_centers || [];
 		},
 		statusOptions() {
-			return this.data.meta.so_statuses || [];
+			const opts = uniqueInternalStatusOptions(this.data.rows || []);
+			const known = new Set(opts.map((o) => o.value));
+			(this.selectedStatuses || []).forEach((s) => {
+				if (s && !known.has(s)) opts.push({ value: s, label: s });
+			});
+			return opts;
+		},
+		statusFilterLabel() {
+			const n = this.selectedStatuses.length;
+			return n === 0
+				? __("Tous les statuts internes")
+				: n === 1
+					? this.selectedStatuses[0]
+					: `${n} ${__("statuts")}`;
 		},
 		conducteurLabel() {
 			const n = this.selectedCM.length;
 			return n === 0 ? __("Tous les responsables") : n === 1 ? this.cmName(this.selectedCM[0]) : `${n} ${__("responsables")}`;
 		},
 		hasGlobalFilters() {
-			return this.selectedCM.length || this.store.filters.company || this.store.filters.cost_center || this.store.filters.status;
+			return this.selectedCM.length || this.store.filters.company || this.store.filters.cost_center;
 		},
 		kpiCards() {
 			const s = this.data.summary || {};
@@ -231,7 +264,7 @@ export default {
 				{ key: "raf", label: __("Reste à facturer"), value: fmtCompact(s.remaining_ht), sub: __("HT"), color: "#2e7d32" },
 				{ key: "h", label: __("Heures"), value: Math.round(s.hours_solde || 0) + "h", sub: __("solde / {0}h total", [Math.round(s.hours_total || 0)]), color: "#6a3fb0" },
 				{ key: "arc", label: __("ARC en cours"), value: String(s.nb_arcs || 0), sub: __("réceptions attendues"), color: "#1565c0" },
-				{ key: "ev", label: __("Événements"), value: String(s.nb_events || 0), sub: __("VT / pose / autres"), color: "#00838f" },
+				{ key: "ev", label: __("Événements"), value: String(s.nb_events || 0), sub: __("à venir · VT / pose / autres"), color: "#00838f" },
 			];
 		},
 		filtered() {
@@ -239,20 +272,20 @@ export default {
 			const q = this.search.trim().toLowerCase();
 			if (q) {
 				rows = rows.filter((r) =>
-					[r.name, r.customer_name, r.reference_piece, r.construction_manager_name, r.custom_construction_status, r.project]
+					[r.name, r.customer_name, r.reference_piece, r.construction_manager_name, r.custom_construction_status, r.project, rowStatusLabel(r)]
 						.join(" ")
 						.toLowerCase()
 						.includes(q)
 				);
 			}
-			if (this.facetStatus) rows = rows.filter((r) => r.status === this.facetStatus);
+			rows = filterRowsByInternalStatuses(rows, this.selectedStatuses);
 			if (this.facChantier === "set") rows = rows.filter((r) => (r.custom_construction_status || "").trim());
 			if (this.facChantier === "empty") rows = rows.filter((r) => !(r.custom_construction_status || "").trim());
 			if (this.onlyArc) rows = rows.filter((r) => (r.pending_arcs || []).length);
 			if (this.onlyOverdueArc) rows = rows.filter((r) => (r.pending_arcs || []).some((a) => a.overdue));
 			const ef = this.eventFilter;
 			if (!Object.values(ef).every(Boolean)) {
-				rows = rows.filter((r) => (r.events || []).some((e) => ef[e.kind]));
+				rows = rows.filter((r) => futureEvents(r.events || []).some((e) => ef[e.kind]));
 			}
 			const key = this.sortKey;
 			const dir = this.sortDir;
@@ -277,7 +310,7 @@ export default {
 				hTotal: sum((row) => row.hours_total),
 				hSolde: sum((row) => row.hours_solde),
 				arcs: sum((row) => (row.pending_arcs || []).length),
-				events: sum((row) => (row.events || []).length),
+				events: sum((row) => futureEvents(row.events || []).length),
 			};
 		},
 		grouped() {
@@ -298,7 +331,8 @@ export default {
 		fmtCompact,
 		sortValue(row, key) {
 			if (key === "nb_arcs") return (row.pending_arcs || []).length;
-			if (key === "nb_events") return (row.events || []).length;
+			if (key === "nb_events") return futureEvents(row.events || []).length;
+			if (key === "status") return rowStatusLabel(row);
 			return row[key];
 		},
 		cmName(value) {
@@ -314,12 +348,20 @@ export default {
 			this.cmOpen = false;
 			this.applyCM();
 		},
+		applyStatuses() {
+			this.store.filters.statuses = [...this.selectedStatuses];
+			if (this.store.syncUrl) this.store.syncUrl();
+		},
+		clearStatuses() {
+			this.selectedStatuses = [];
+			this.statusOpen = false;
+			this.applyStatuses();
+		},
 		clearGlobal() {
 			this.selectedCM = [];
 			this.store.filters.conducteurs = [];
 			this.store.filters.company = null;
 			this.store.filters.cost_center = null;
-			this.store.filters.status = null;
 			this.store.reload();
 		},
 		openDoc(dt, name) {

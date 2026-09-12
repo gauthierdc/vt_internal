@@ -46,7 +46,12 @@ if "frappe" not in sys.modules:
 	sys.modules["frappe.utils"] = frappe.utils
 
 from vt_internal.vt_internal.api.order_book import (
+	PARIS_TZ,
+	build_internal_status_options,
 	build_order_book_payload,
+	event_is_future,
+	filter_rows_by_internal_statuses,
+	sales_order_internal_status,
 	serialize_arc,
 	serialize_event,
 	serialize_row,
@@ -103,7 +108,7 @@ def _structured_row(**overrides):
 
 class TestOrderBookApi(unittest.TestCase):
 	def test_serialize_row_is_json_friendly_no_html(self):
-		out = serialize_row(_structured_row())
+		out = serialize_row(_structured_row(), now=datetime(2026, 9, 9, 8, 0, tzinfo=PARIS_TZ))
 		self.assertEqual(out["customer_name"], "Miroiterie Avignon")
 		self.assertEqual(out["delivery_date"], "2026-09-20")
 		self.assertEqual(out["pending_arcs"][0]["schedule_date"], "2026-09-01")
@@ -137,6 +142,8 @@ class TestOrderBookApi(unittest.TestCase):
 		self.assertEqual(payload["summary"]["remaining_ht"], 800)
 		self.assertEqual(payload["meta"]["companies"], ["MAV"])
 		self.assertEqual(payload["meta"]["so_statuses"][0]["value"], "To Deliver and Bill")
+		self.assertEqual(payload["meta"]["internal_statuses"][0]["value"], "Chantier à planifier")
+		self.assertEqual(payload["rows"][0]["internal_status"], "Chantier à planifier")
 		self.assertIsInstance(payload["rows"][0]["pending_arcs"], list)
 		self.assertIsInstance(payload["rows"][0]["events"], list)
 
@@ -148,6 +155,109 @@ class TestOrderBookApi(unittest.TestCase):
 		)
 		self.assertEqual(payload["meta"]["so_statuses"][0]["value"], "Draft")
 		self.assertEqual(payload["today"], "2026-09-09")
+		self.assertEqual(payload["meta"]["internal_statuses"][0]["value"], "Chantier à planifier")
+
+	def test_serialize_row_drops_past_events_keeps_future(self):
+		now = datetime(2026, 9, 12, 14, 0, tzinfo=PARIS_TZ)
+		row = _structured_row(
+			events=[
+				{
+					"name": "EV-PAST-DAY",
+					"starts_on": datetime(2026, 9, 11, 9, 0),
+					"kind": "vt",
+					"past": True,
+				},
+				{
+					"name": "EV-PAST-TODAY",
+					"starts_on": datetime(2026, 9, 12, 9, 0),
+					"kind": "ft",
+					"past": False,
+				},
+				{
+					"name": "EV-FUTURE",
+					"starts_on": datetime(2026, 9, 12, 16, 0),
+					"kind": "event",
+					"past": False,
+				},
+				{
+					"name": "EV-NODATE",
+					"starts_on": None,
+					"kind": "event",
+				},
+			]
+		)
+		out = serialize_row(row, now=now)
+		names = [e["name"] for e in out["events"]]
+		self.assertEqual(names, ["EV-FUTURE"])
+
+	def test_payload_event_kpi_counts_only_future(self):
+		now = datetime(2026, 9, 12, 14, 0, tzinfo=PARIS_TZ)
+		row = _structured_row(
+			events=[
+				{"name": "EV-OLD", "starts_on": datetime(2026, 8, 1, 8, 0), "kind": "vt", "past": True},
+				{"name": "EV-NEXT", "starts_on": datetime(2026, 9, 20, 9, 0), "kind": "ft", "past": False},
+			]
+		)
+		payload = build_order_book_payload([row], {}, date(2026, 9, 12), now=now)
+		self.assertEqual(len(payload["rows"][0]["events"]), 1)
+		self.assertEqual(payload["rows"][0]["events"][0]["name"], "EV-NEXT")
+		self.assertEqual(payload["summary"]["nb_events"], 1)
+
+	def test_event_is_future_paris_timezone_and_date_only(self):
+		now = datetime(2026, 9, 12, 14, 0, tzinfo=PARIS_TZ)
+		self.assertFalse(event_is_future(None, now))
+		self.assertFalse(event_is_future("", now))
+		self.assertFalse(event_is_future(datetime(2026, 9, 12, 13, 59), now))
+		self.assertTrue(event_is_future(datetime(2026, 9, 12, 14, 0), now))
+		self.assertTrue(event_is_future(datetime(2026, 9, 12, 15, 0), now))
+		self.assertTrue(event_is_future(date(2026, 9, 12), now))
+		self.assertFalse(event_is_future(date(2026, 9, 11), now))
+		self.assertTrue(event_is_future("2026-09-13 08:00:00", now))
+		self.assertFalse(event_is_future("2026-09-12 08:00:00", now))
+
+	def test_internal_status_matches_vue_pills(self):
+		self.assertEqual(
+			sales_order_internal_status(_structured_row()),
+			"Chantier à planifier",
+		)
+		self.assertEqual(
+			sales_order_internal_status(_structured_row(custom_statut_fiche_de_travail="", custom_per_received=0)),
+			"À fabriquer",
+		)
+		self.assertEqual(
+			sales_order_internal_status(
+				_structured_row(custom_statut_fiche_de_travail="", custom_per_received=40)
+			),
+			"En fabrication",
+		)
+		self.assertEqual(
+			sales_order_internal_status(
+				_structured_row(custom_statut_fiche_de_travail="À faire", per_billed=20)
+			),
+			"Chantier à faire",
+		)
+		self.assertEqual(
+			sales_order_internal_status(
+				_structured_row(custom_statut_fiche_de_travail="", custom_per_received=100, per_delivered=0)
+			),
+			"À livrer",
+		)
+		self.assertEqual(sales_order_internal_status({"per_billed": 100, "status": "Completed"}), "Terminé")
+
+	def test_filter_rows_by_internal_statuses_multi(self):
+		rows = [
+			{"name": "A", "internal_status": "À fabriquer"},
+			{"name": "B", "internal_status": "En fabrication"},
+			{"name": "C", "internal_status": "Chantier à faire"},
+		]
+		self.assertEqual(
+			[r["name"] for r in filter_rows_by_internal_statuses(rows, ["À fabriquer", "Chantier à faire"])],
+			["A", "C"],
+		)
+		self.assertEqual(filter_rows_by_internal_statuses(rows, []), rows)
+		self.assertEqual(filter_rows_by_internal_statuses(rows, None), rows)
+		opts = build_internal_status_options(rows)
+		self.assertEqual([o["value"] for o in opts], ["À fabriquer", "En fabrication", "Chantier à faire"])
 
 
 if __name__ == "__main__":
