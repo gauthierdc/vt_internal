@@ -220,6 +220,7 @@ doc_events = {
 		"validate": "vt_internal.vt_internal.events.employee.validate",
 	},
 	"Event": {
+		"before_insert": "vt_internal.vt_internal.events.event.before_insert",
 		"validate": "vt_internal.vt_internal.events.event.validate",
 		"on_update": "vt_internal.vt_internal.events.event.on_update",
 		"after_delete": "vt_internal.vt_internal.events.event.after_delete",
@@ -363,7 +364,7 @@ scheduler_events = {
 			"0 19 * * 5": [
 					"vt_internal.vt_internal.weekly_hours_report.send_by_mail_weekly_hours_report"
 			],
-			# Tous les soirs à 18h : rappel (SMS ou e-mail) des interventions du lendemain
+			# Tous les soirs à 18h : rappel J-1 (SMS ou e-mail) si custom_envoyer_sms_client
 			"0 18 * * *": [
 					"vt_internal.vt_internal.tasks.rappel_intervention.rappel_chantier",
 					"vt_internal.vt_internal.tasks.rappel_intervention.rappel_visite_technique",
