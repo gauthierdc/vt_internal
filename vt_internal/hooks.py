@@ -165,15 +165,21 @@ after_migrate = ["vt_internal.vt_internal.setup.event_employees.after_migrate"]
 
 # Permissions
 # -----------
-# Permissions evaluated in scripted ways
+# Utilisateur restreint à un Cost Center : exclure les Purchase Order et Expense
+# sans centre de coût. Le filtre des valeurs autorisées (parent + descendants)
+# reste celui des User Permissions Frappe.
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+permission_query_conditions = {
+	"Purchase Order": (
+		"vt_internal.vt_internal.permissions.cost_center.get_purchase_order_permission_query_conditions"
+	),
+	"Expense": "vt_internal.vt_internal.permissions.cost_center.get_expense_permission_query_conditions",
+}
+
+has_permission = {
+	"Purchase Order": "vt_internal.vt_internal.permissions.cost_center.has_permission",
+	"Expense": "vt_internal.vt_internal.permissions.cost_center.has_permission",
+}
 
 # DocType Class
 # ---------------
