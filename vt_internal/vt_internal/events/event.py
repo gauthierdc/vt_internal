@@ -15,6 +15,30 @@ from vt_internal.vt_internal.utils.event_employees import (
 )
 
 
+def before_insert(doc, method=None):
+    """Complète custom_company depuis la fiche / VT si manquant.
+
+    Le défaut de custom_envoyer_sms_client est coché pour toutes les sociétés
+    (opt-out). Il est posé côté desk (event.js) pour ne pas écraser un
+    décochage volontaire.
+    """
+    _ensure_company_from_link(doc)
+
+
+def _ensure_company_from_link(doc):
+    """Remplit custom_company depuis la fiche / VT si manquant."""
+    if doc.custom_company:
+        return
+    if doc.custom_fiche_de_travail:
+        doc.custom_company = frappe.db.get_value(
+            "Fiche de travail", doc.custom_fiche_de_travail, "company"
+        )
+    elif doc.custom_visite_technique:
+        doc.custom_company = frappe.db.get_value(
+            "Visite Technique", doc.custom_visite_technique, "company"
+        )
+
+
 def validate(doc, method=None):
     # --- depuis Server Script « Événement avant la sauvegarde » (Before Save) ---
     # Table enfant = source de vérité. Le Link n'est absorbé que s'il est

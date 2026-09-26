@@ -14,6 +14,26 @@ function event_employee_rows(doc) {
     return [];
 }
 
+// --- SMS J-1 : coché pour toutes les sociétés. Décocher l'Event pour ne pas envoyer. ---
+function vt_default_envoyer_sms(_company) {
+    return 1;
+}
+
+function vt_apply_sms_default(frm, company, { force = false } = {}) {
+    if (!frm.fields_dict.custom_envoyer_sms_client) {
+        return;
+    }
+    // force=true : changement de société → on réapplique le défaut métier.
+    // sinon : uniquement si le doc est nouveau (évite d'écraser un choix manuel).
+    if (!force && !frm.is_new()) {
+        return;
+    }
+    const wanted = vt_default_envoyer_sms(company || frm.doc.custom_company);
+    if (cint(frm.doc.custom_envoyer_sms_client) !== wanted) {
+        frm.set_value("custom_envoyer_sms_client", wanted);
+    }
+}
+
 frappe.ui.form.on('Event', {
     refresh(frm) {
         if (frm.fields_dict.custom_event_employees && frm.fields_dict.custom_employé) {
@@ -22,6 +42,10 @@ frappe.ui.form.on('Event', {
         }
         frm.dashboard.links_area.hide();
         frm.events.setup_custom_html(frm);
+        // SMS J-1 : coché sur un nouvel Event (opt-out en décochant)
+        if (frm.is_new()) {
+            vt_apply_sms_default(frm, frm.doc.custom_company);
+        }
         if(frm.doc.project) {
             frappe.db.get_list("Quality Incident", {
                 fields: ["name", "object"],
@@ -100,17 +124,29 @@ frappe.ui.form.on('Event', {
         }
     },
 
+    custom_company(frm) {
+        vt_apply_sms_default(frm, frm.doc.custom_company, { force: true });
+    },
+
 custom_fiche_de_travail(frm) {
     if (!frm.doc.custom_fiche_de_travail) {
         frm.events.setup_custom_html(frm);
         return;
     }
     
-    frappe.db.get_value('Fiche de travail', frm.doc.custom_fiche_de_travail, ['customer', 'address', 'projet'])
+    frappe.db.get_value('Fiche de travail', frm.doc.custom_fiche_de_travail, ['customer', 'address', 'projet', 'company'])
         .then(r => {
             const customer = r?.message?.customer || frm.doc.custom_fiche_de_travail;
             const address = r?.message?.address;
             const project = r?.message?.projet;
+            const company = r?.message?.company;
+
+            if (company) {
+                const company_changed = frm.doc.custom_company !== company;
+                frm.set_value('custom_company', company).then(() => {
+                    vt_apply_sms_default(frm, company, { force: company_changed || frm.is_new() });
+                });
+            }
 
             if (project) {
                 frm.set_value('project', project);
@@ -152,11 +188,19 @@ custom_visite_technique(frm) {
         return;
     }
     
-    frappe.db.get_value('Visite Technique', frm.doc.custom_visite_technique, ['client', 'address', 'projet'])
+    frappe.db.get_value('Visite Technique', frm.doc.custom_visite_technique, ['client', 'address', 'projet', 'company'])
         .then(r => {
             const client = r?.message?.client || frm.doc.custom_visite_technique;
             const address = r?.message?.address;
             const projet = r?.message?.projet;
+            const company = r?.message?.company;
+
+            if (company) {
+                const company_changed = frm.doc.custom_company !== company;
+                frm.set_value('custom_company', company).then(() => {
+                    vt_apply_sms_default(frm, company, { force: company_changed || frm.is_new() });
+                });
+            }
 
             if (projet) {
                 frm.set_value('project', projet);
@@ -464,7 +508,9 @@ function duplicate_event(frm, options = {}) {
         event_category: doc.event_category,
         event_type: doc.event_type,
         custom_fiche_de_travail: doc.custom_fiche_de_travail,
-        custom_visite_technique: doc.custom_visite_technique
+        custom_visite_technique: doc.custom_visite_technique,
+        custom_company: doc.custom_company,
+        custom_envoyer_sms_client: doc.custom_envoyer_sms_client
     };
 
     if (options.vehicle) {
@@ -547,6 +593,8 @@ function duplicate_event_multiday(frm, nb_days) {
             event_type: doc.event_type,
             custom_fiche_de_travail: doc.custom_fiche_de_travail,
             custom_visite_technique: doc.custom_visite_technique,
+            custom_company: doc.custom_company,
+            custom_envoyer_sms_client: doc.custom_envoyer_sms_client,
             // Garder les mêmes employés / véhicule que l'original
             custom_event_employees: event_employee_rows(doc),
             custom_vehicle: doc.custom_vehicle
