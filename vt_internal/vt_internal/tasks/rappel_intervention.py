@@ -2,7 +2,8 @@
 
 Chaque soir, parcourt les Event du lendemain rattachés à une Fiche de travail
 (pose) ou une Visite Technique. Envoi uniquement si
-`custom_envoyer_sms_client = 1` (case à cocher par événement) :
+`custom_envoyer_sms_client = 1` (cochée par défaut pour toute société ;
+décocher l'Event pour ne pas envoyer) :
   - SMS si un numéro mobile client est renseigné ;
   - sinon e-mail HTML si une adresse est renseignée.
 Les numéros fixes commençant par 04 (AllMySMS les refuse, HTTP 400) sont
@@ -37,16 +38,12 @@ from vt_internal.vt_internal.utils.event_employees import (
 )
 from vt_internal.vt_internal.utils.phone import is_french_landline
 
-MAV = "Miroiterie Avignonnaise"
-
-# Sociétés pour lesquelles le SMS J-1 est coché par défaut à la création.
-# Vitrerie Stéphanoise et les autres restent en opt-in (défaut 0).
-SMS_DEFAULT_CHECKED_COMPANIES = frozenset({MAV})
-
-
 def default_envoyer_sms_for_company(company: str | None) -> int:
-    """1 si la société envoie le SMS J-1 par défaut (MAV), sinon 0 (VS / autres)."""
-    return 1 if company and company in SMS_DEFAULT_CHECKED_COMPANIES else 0
+    """1 pour toute société : le SMS part, on décoche l'Event pour ne pas envoyer.
+
+    `company` est conservé pour les appelants ; la règle ne dépend plus de la société.
+    """
+    return 1
 
 
 def rappel_chantier():

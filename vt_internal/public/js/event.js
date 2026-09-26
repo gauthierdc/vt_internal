@@ -14,12 +14,9 @@ function event_employee_rows(doc) {
     return [];
 }
 
-// --- SMS J-1 (Solène) : défaut de custom_envoyer_sms_client selon la société ---
-// MAV = coché (envoi auto) ; VS / autres = décoché (opt-in).
-const VT_SMS_DEFAULT_CHECKED_COMPANIES = new Set(["Miroiterie Avignonnaise"]);
-
-function vt_default_envoyer_sms(company) {
-    return company && VT_SMS_DEFAULT_CHECKED_COMPANIES.has(company) ? 1 : 0;
+// --- SMS J-1 : coché pour toutes les sociétés. Décocher l'Event pour ne pas envoyer. ---
+function vt_default_envoyer_sms(_company) {
+    return 1;
 }
 
 function vt_apply_sms_default(frm, company, { force = false } = {}) {
@@ -45,8 +42,8 @@ frappe.ui.form.on('Event', {
         }
         frm.dashboard.links_area.hide();
         frm.events.setup_custom_html(frm);
-        // SMS J-1 : défaut si nouveau Event avec société déjà connue
-        if (frm.is_new() && frm.doc.custom_company) {
+        // SMS J-1 : coché sur un nouvel Event (opt-out en décochant)
+        if (frm.is_new()) {
             vt_apply_sms_default(frm, frm.doc.custom_company);
         }
         if(frm.doc.project) {

@@ -59,11 +59,8 @@ DATE = "samedi 26 septembre 2026"
 
 class TestDefaultsAndTemplates(unittest.TestCase):
     def test_company_defaults(self):
-        self.assertEqual(default_envoyer_sms_for_company(MAV), 1)
-        self.assertEqual(default_envoyer_sms_for_company(VS), 0)
-        self.assertEqual(default_envoyer_sms_for_company("Autre"), 0)
-        self.assertEqual(default_envoyer_sms_for_company(None), 0)
-        self.assertEqual(default_envoyer_sms_for_company(""), 0)
+        for company in (MAV, VS, "Autre", None, ""):
+            self.assertEqual(default_envoyer_sms_for_company(company), 1)
 
     def test_pose_has_no_technician_phone(self):
         morning = build_sms_message(

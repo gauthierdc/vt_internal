@@ -18,8 +18,9 @@ from vt_internal.vt_internal.utils.event_employees import (
 def before_insert(doc, method=None):
     """Complète custom_company depuis la fiche / VT si manquant.
 
-    Le défaut de custom_envoyer_sms_client (MAV coché, VS/autres décoché) est
-    géré côté desk (event.js) pour ne pas écraser un décochage volontaire.
+    Le défaut de custom_envoyer_sms_client est coché pour toutes les sociétés
+    (opt-out). Il est posé côté desk (event.js) pour ne pas écraser un
+    décochage volontaire.
     """
     _ensure_company_from_link(doc)
 
