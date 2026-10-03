@@ -16,6 +16,7 @@ import json
 
 import frappe
 
+from vt_internal.vt_internal.utils.ca_facture import ca_facture_predicate
 from vt_internal.vt_internal.utils.margin_utils import calculate_margin, get_theoretical_map
 
 # Types d'activité exclus du "temps chantier" (temps atelier / logistique).
@@ -134,10 +135,29 @@ def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None):
 	)[0]
 	heures_sav = round(sav.h or 0)
 
-	# CA de la période (factures non-acompte, projets "chantiers" réels)
+	# CA facturé : HT net des avoirs, y compris les chantiers à 0 h estimée.
+	# Voir vt_internal.utils.ca_facture.
+	ca_where = ca_facture_predicate()
 	ca = frappe.db.sql(
 		f"""
-		SELECT SUM(si.total) AS ca, SUM(si.custom_labour_hours) AS heures_facturees
+		SELECT SUM(si.total) AS ca
+		FROM `tabSales Invoice` si
+		JOIN `tabProject` p ON p.name = si.project
+		WHERE {ca_where}
+		  AND si.project IS NOT NULL AND si.project != ''
+		  AND si.posting_date BETWEEN %s AND %s{comp_si}{cm_sql}
+		""",
+		tuple([start_date, end_date, *comp_psi, *cm_p]),
+		as_dict=True,
+	)[0]
+	ca_periode = round(ca.ca or 0)
+
+	# Heures de MO portées par les factures. Distinct du CA : le ratio
+	# heures facturées / réalisées ignore toujours les avoirs et les chantiers
+	# dont les heures estimées sont ≤ 1 h (ce n'est pas un montant facturé).
+	heures_row = frappe.db.sql(
+		f"""
+		SELECT SUM(si.custom_labour_hours) AS heures_facturees
 		FROM `tabSales Invoice` si
 		JOIN `tabProject` p ON p.name = si.project
 		WHERE si.docstatus = 1 AND si.is_return = 0
@@ -148,8 +168,7 @@ def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None):
 		tuple([start_date, end_date, *comp_psi, *cm_p]),
 		as_dict=True,
 	)[0]
-	ca_periode = round(ca.ca or 0)
-	heures_facturees = round(ca.heures_facturees or 0)
+	heures_facturees = round(heures_row.heures_facturees or 0)
 	pct_heures = round(heures_facturees / heures_realisees * 100) if heures_realisees > 0 else 0
 
 	# Nb de chantiers distincts pointés (validé ou brouillon) sur la période
@@ -336,14 +355,14 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	)
 	fab_map = {r.project: round(r.montant or 0) for r in fab_rows}
 
-	# --- CA facturé par projet sur la période ---------------------------------
+	# --- CA facturé par projet sur la période (même définition que le KPI) ---
 	si_cm_join = " JOIN `tabProject` p ON p.name = si.project" if proj_join else ""
+	ca_where = ca_facture_predicate()
 	ca_period_rows = frappe.db.sql(
 		f"""
 		SELECT si.project AS project, SUM(si.total) AS ca
 		FROM `tabSales Invoice` si{si_cm_join}
-		WHERE si.docstatus = 1 AND si.is_return = 0
-		  AND (si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)
+		WHERE {ca_where}
 		  AND si.project IS NOT NULL AND si.project != ''
 		  AND si.posting_date BETWEEN %s AND %s{comp_si}{cm_sql}
 		GROUP BY si.project
@@ -408,12 +427,12 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	if project_names:
 		ph = ",".join(["%s"] * len(project_names))
 
+		ca_where = ca_facture_predicate()
 		for r in frappe.db.sql(
 			f"""
 			SELECT si.project, SUM(si.total) AS ca
 			FROM `tabSales Invoice` si
-			WHERE si.docstatus = 1 AND si.is_return = 0
-			  AND (si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)
+			WHERE {ca_where}
 			  AND si.project IN ({ph})
 			GROUP BY si.project
 			""",
@@ -571,6 +590,9 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 			"marge_theo": round(theo_margin),
 			"marge_reel": round(real_margin),
 			"marge_diff": round(real_margin - theo_margin),
+			# Bases de la marge réelle, pour la marge pondérée de la sélection.
+			"vente": round(theo_vente),
+			"cout_reel": round(real_cost),
 			"heures_val": h_val,
 			"heures_draft": h_draft,
 			"heures_total": hours_total,
@@ -639,15 +661,15 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 			cm_users.add(c["conducteur"])
 
 	# --- Séries hebdomadaires (lundi = début de semaine) ----------------------
+	ca_where = ca_facture_predicate()
 	ca_week = frappe.db.sql(
 		f"""
 		SELECT DATE(DATE_SUB(si.posting_date, INTERVAL WEEKDAY(si.posting_date) DAY)) AS wk,
 		       SUM(si.total) AS ca
 		FROM `tabSales Invoice` si
 		JOIN `tabProject` p ON p.name = si.project
-		WHERE si.docstatus = 1 AND si.is_return = 0
-		  AND (si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)
-		  AND p.custom_estimated_labor_hours > 1
+		WHERE {ca_where}
+		  AND si.project IS NOT NULL AND si.project != ''
 		  AND si.posting_date BETWEEN %s AND %s{comp_si}{cm_sql}
 		GROUP BY wk ORDER BY wk
 		""",
@@ -730,13 +752,13 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	def _names(sql, params):
 		return frappe.db.sql(sql, tuple(params), pluck=True)
 
+	ca_where = ca_facture_predicate()
 	inv_names = _names(
 		f"""
 		SELECT si.name FROM `tabSales Invoice` si
 		JOIN `tabProject` p ON p.name = si.project
-		WHERE si.docstatus = 1 AND si.is_return = 0
-		  AND (si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)
-		  AND p.custom_estimated_labor_hours > 1
+		WHERE {ca_where}
+		  AND si.project IS NOT NULL AND si.project != ''
 		  AND si.posting_date BETWEEN %s AND %s{comp_si}{cm_sql}
 		""",
 		[start_date, end_date, *comp_psi, *cm_p],

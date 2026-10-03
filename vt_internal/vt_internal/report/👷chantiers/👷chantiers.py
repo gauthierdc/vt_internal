@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 
+from vt_internal.vt_internal.utils.ca_facture import aggregate_margin, ca_facture_conditions
 from vt_internal.vt_internal.utils.margin_utils import (
 	get_theoretical,
 	get_project_costs,
@@ -131,6 +132,9 @@ def execute(filters: dict | None = None):
 	total_hours_actual = 0
 	total_hours_expected = 0
 	total_hours_periode = 0
+	# Bases de la marge réelle des chantiers affichés (mêmes filtres que le rapport).
+	total_vente_selection = 0.0
+	total_cout_selection = 0.0
 	
 	# Compteurs pour le header
 	nb_chantiers_factures_periode = 0  # Chantiers dont statut est Completed
@@ -147,12 +151,10 @@ def execute(filters: dict | None = None):
 	hours_en_cours_periode = 0  # Heures réalisées sur chantiers pas encore facturés
 
 	# Récupérer le CA facturé par projet sur la période
-	ca_by_project_sql = """
+	ca_by_project_sql = f"""
 		SELECT si.project, SUM(si.total) AS ca_total
 		FROM `tabSales Invoice` si
-		WHERE si.docstatus = 1
-		  AND si.is_return = 0
-		  AND (si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)
+		WHERE {' AND '.join(ca_facture_conditions())}
 		  AND si.project IS NOT NULL
 		  AND si.posting_date BETWEEN %s AND %s
 	"""
@@ -210,6 +212,8 @@ def execute(filters: dict | None = None):
 		real_margin = calculate_margin(real_vente, real_cost)
 
 		margin_diff = real_margin - theo_margin
+		total_vente_selection += theo_vente
+		total_cout_selection += real_cost
 
 		# Heures
 		labour_data = get_project_labour_hours(project_name)
@@ -295,16 +299,12 @@ def execute(filters: dict | None = None):
 		"is_total_row": 1,
 	})
 
-	# Calcul du CA de la période
-	# Récupération des factures qui ne sont pas des acomptes, en docstatus=1,
-	# dont le projet a custom_estimated_labor_hours > 1
+	# CA facturé : HT net des avoirs, sans seuil d'heures estimées.
+	# Même prédicat que la page Chantiers (vt_internal.utils.ca_facture).
 	ca_periode_where = [
-		"si.docstatus = 1",
-		"si.is_return = 0",
-		"(si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)",
-		"p.custom_estimated_labor_hours > 1",
+		*ca_facture_conditions(),
 		"p.name IS NOT NULL",
-		"si.posting_date BETWEEN %s AND %s"
+		"si.posting_date BETWEEN %s AND %s",
 	]
 	ca_periode_params: list = [start_date, end_date]
 
@@ -344,12 +344,18 @@ def execute(filters: dict | None = None):
 	ca_periode_result = frappe.db.sql(ca_periode_sql, tuple(ca_periode_params), as_dict=True)
 	ca_periode_total = round(ca_periode_result[0].get('ca_total') or 0) if ca_periode_result else 0
 
-	# Heures facturées (somme de custom_labour_hours des factures avec les mêmes filtres)
+	# Heures facturées : hors avoirs, et toujours hors chantiers ≤ 1 h estimée.
+	# Distinct du CA : le seuil d'heures ne porte plus sur le montant facturé.
+	heures_facturees_where = [
+		*ca_periode_where,
+		"si.is_return = 0",
+		"p.custom_estimated_labor_hours > 1",
+	]
 	heures_facturees_sql = f"""
 		SELECT SUM(si.custom_labour_hours) AS heures_total
 		FROM `tabSales Invoice` si
 		LEFT JOIN `tabProject` p ON p.name = si.project
-		WHERE {' AND '.join(ca_periode_where)}
+		WHERE {' AND '.join(heures_facturees_where)}
 	"""
 	heures_facturees_result = frappe.db.sql(heures_facturees_sql, tuple(ca_periode_params), as_dict=True)
 	heures_facturees = round(heures_facturees_result[0].get('heures_total') or 0) if heures_facturees_result else 0
@@ -412,14 +418,30 @@ def execute(filters: dict | None = None):
 	else:
 		ca_display = str(ca_periode_total)
 
+	marge_sel = aggregate_margin([
+		{"vente": total_vente_selection, "cout_reel": total_cout_selection},
+	])
+	if marge_sel["pct"] is None:
+		marge_display = "—"
+	else:
+		marge_eur = marge_sel["eur"]
+		if abs(marge_eur) >= 1000000:
+			marge_eur_txt = f"{round(marge_eur / 1000000)}M"
+		elif abs(marge_eur) >= 1000:
+			marge_eur_txt = f"{round(marge_eur / 1000)}k"
+		else:
+			marge_eur_txt = str(marge_eur)
+		marge_display = f"{marge_sel['pct']}% · {marge_eur_txt} €"
+
 	# Message en haut avec les statistiques
 	message = f"""
 	<div style="display: flex; gap: 20px; margin-bottom: 15px; flex-wrap: wrap;">
-		<!-- Bloc CA de la période -->
+		<!-- Bloc CA facturé + marge des chantiers affichés -->
 		<div style="background: #f5f5f5; border-radius: 8px; padding: 15px; min-width: 150px; text-align: center;">
-			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">CA période</div>
+			<div style="font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 8px;">CA facturé</div>
 			<div style="font-size: 36px; font-weight: bold; color: #1976d2;">{ca_display} €</div>
-			<div style="font-size: 10px; color: #999;">Factures validées</div>
+			<div style="font-size: 13px; font-weight: bold; color: #37474f; margin-top: 6px;">Marge {marge_display}</div>
+			<div style="font-size: 10px; color: #999;">HT, net des avoirs</div>
 		</div>
 
 		<!-- Bloc Heures réalisées / facturées -->
