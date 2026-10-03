@@ -91,10 +91,17 @@
 					@click="kpiClick(k.key)"
 				>
 					<div class="vtc-kpi-label">{{ k.label }} <span class="vtc-info">{{ kpiClickable(k.key) ? '↗' : 'ⓘ' }}</span></div>
-					<div class="vtc-kpi-value">{{ k.value }}</div>
+					<div class="vtc-kpi-value" :class="{ 'with-margin': k.key === 'ca' }">
+						<span>{{ k.value }}</span>
+						<span v-if="k.key === 'ca'" class="vtc-sel-margin" :data-tip="selectionMarginTip">
+							<span class="lbl">{{ __('Marge') }}</span>
+							<span class="pct">{{ selectionMarginLabel }}</span>
+							<span v-if="selectionMargin.pct != null" class="eur">{{ fmtCompact(selectionMargin.eur) }}</span>
+						</span>
+					</div>
 					<div class="vtc-kpi-foot">
 						<span class="vtc-kpi-sub">{{ k.sub }}</span>
-						<span v-if="k.delta !== null" class="vtc-delta" :class="k.deltaClass" data-tip="Variation vs période précédente de même durée">{{ k.deltaText }}</span>
+						<span v-if="k.deltaText" class="vtc-delta" :class="k.deltaClass" :data-tip="k.deltaTip">{{ k.deltaText }}</span>
 					</div>
 				</div>
 			</div>
@@ -182,7 +189,7 @@
 							<th @click="sortBy('flux')" class="sortable" :data-tip="__('Flux financiers de la période, par chantier : 🧾 Facturé (ventes) · 🛒 Achats (commandes fournisseur) · 💳 Dépenses (notes de frais) · 🏭 Fabrication VT. Cliquer un montant ouvre la liste correspondante. Tri = total.')">{{ __('Flux (pér.)') }} <SortIc :dir="sortDir" :on="sortKey === 'flux'" /></th>
 							<th @click="sortBy('marge_reel')" class="sortable" :data-tip="__('Barre = marge réelle (vente − coûts réels) ÷ vente. Trait vertical = marge théorique (basée sur les devis). Badge = écart réel − théorique, en points.')">{{ __('Marge') }} <SortIc :dir="sortDir" :on="sortKey === 'marge_reel'" /></th>
 							<th @click="sortBy('heures_periode')" class="sortable" :data-tip="__('Heures pointées SUR LA PÉRIODE : validées + non validées (brouillon). Sous-texte : cumul total du chantier / heures prévues (vendues).')">{{ __('Pointé (pér.)') }} <SortIc :dir="sortDir" :on="sortKey === 'heures_periode'" /></th>
-							<th @click="sortBy('total_sold')" class="sortable num" :data-tip="__('Montant total du projet = somme des commandes client (Sales Orders) rattachées au chantier, HT.')">{{ __('Total projet') }} <SortIc :dir="sortDir" :on="sortKey === 'total_sold'" /></th>
+							<th @click="sortBy('total_sold')" class="sortable num" :data-tip="__('Commandé (HT) = somme des commandes client (Sales Orders) rattachées au chantier. Ce n’est pas le CA facturé.')">{{ __('Commandé') }} <SortIc :dir="sortDir" :on="sortKey === 'total_sold'" /></th>
 							<th @click="sortBy('pct_facture')" class="sortable" :data-tip="__('Avancement de facturation (tout l’historique) : total facturé ÷ total commandé (HT). « reste » = commandé − facturé.')">{{ __('Facturation cumul') }} <SortIc :dir="sortDir" :on="sortKey === 'pct_facture'" /></th>
 							<th @click="sortBy('retard')" class="sortable num" :data-tip="__('Jours écoulés depuis la date de fin prévue, pour les chantiers non encore facturés.')">{{ __('Retard') }} <SortIc :dir="sortDir" :on="sortKey === 'retard'" /></th>
 							<th :data-tip="__('SAV = repointage sur chantier facturé · ⚠️ = incidents qualité (cliquable) · 📝∅ = facturé sans réception · 📝 = réception présente.')">{{ __('Alertes') }}</th>
@@ -215,7 +222,7 @@
 								<span v-if="totals.dep" class="ft dep">💳 {{ fmtCompact(totals.dep) }}</span>
 								<span v-if="totals.fab" class="ft fab">🏭 {{ fmtCompact(totals.fab) }}</span>
 							</td>
-							<td></td>
+							<td :data-tip="selectionMarginTip"><b>{{ selectionMarginLabel }}</b></td>
 							<td><b>{{ totals.hv }}h</b><span v-if="totals.hd" class="td-draft">+{{ totals.hd }}h</span></td>
 							<td class="num">{{ fmtMoney(totals.total_sold) }}</td>
 							<td class="num" :data-tip="__('Reste à facturer cumulé')"><span v-if="totals.reste">{{ __('reste') }} {{ fmtMoney(totals.reste) }}</span></td>
@@ -241,7 +248,7 @@
 							<th>{{ __('Flux (pér.)') }}</th>
 							<th>{{ __('Marge') }}</th>
 							<th>{{ __('Pointé (pér.)') }}</th>
-							<th class="num">{{ __('Total projet') }}</th>
+							<th class="num">{{ __('Commandé') }}</th>
 							<th>{{ __('Facturation cumul') }}</th>
 							<th class="num">{{ __('Retard') }}</th>
 							<th>{{ __('Alertes') }}</th>
@@ -260,7 +267,7 @@
 import { h } from "vue";
 import ProjectRow from "./ProjectRow.vue";
 import DropSelect from "./DropSelect.vue";
-import { ACT_COLORS, fmtMoney, fmtCompact } from "./helpers.js";
+import { ACT_COLORS, aggregateMargin, fmtMoney, fmtCompact, periodVariation } from "./helpers.js";
 
 // Petite flèche de tri (composant fonctionnel avec fonction de rendu, donc
 // sans compilation de template à l'exécution — Frappe bundle Vue runtime-only).
@@ -327,8 +334,8 @@ export default {
 		kpiCards() {
 			const k = this.kpis, pv = this.prev;
 			return [
-				this.card("ca", __("CA facturé"), fmtCompact(k.ca_periode), __("factures validées"), k.ca_periode, pv.ca_periode, false,
-					__("Somme des factures de vente validées (hors acomptes et hors avoirs) rattachées à un chantier réel (heures estimées > 1), dont la date de facturation tombe dans la période.")),
+				this.card("ca", __("CA facturé"), fmtCompact(k.ca_periode), __("HT, net des avoirs"), k.ca_periode, pv.ca_periode, false,
+					__("Somme HT des factures de vente validées, nette des avoirs, hors acomptes, rattachées à un chantier, dont la date de facturation tombe dans la période. Les chantiers sans heures estimées sont inclus. La marge à droite porte sur les chantiers affichés dans le tableau.")),
 				this.card("po", __("Commandé fournisseur"), fmtCompact(k.commande_fournisseur), __("commandes fournisseur"), k.commande_fournisseur, pv.commande_fournisseur, true,
 					__("Somme des montants des lignes de commandes fournisseur (non annulées) rattachées à un chantier, dont la commande est datée dans la période.")),
 				this.card("depenses", __("Dépenses"), fmtCompact(k.depenses), __("notes de frais"), k.depenses, pv.depenses, true,
@@ -429,6 +436,17 @@ export default {
 			if (!q) return list;
 			return list.filter((p) => (p.project + " " + p.client + " " + (p.conducteur_nom || "")).toLowerCase().includes(q));
 		},
+		selectionMargin() {
+			return aggregateMargin(this.filtered);
+		},
+		selectionMarginLabel() {
+			const pct = this.selectionMargin.pct;
+			return pct == null ? "—" : `${pct}%`;
+		},
+		selectionMarginTip() {
+			const m = this.selectionMargin;
+			return __("Marge réelle des chantiers affichés, avec les mêmes filtres que le tableau : (vente − coûts réels) ÷ vente. Base de vente : {0}.", [fmtMoney(m.vente)]);
+		},
 		totals() {
 			const r = this.filtered;
 			const sum = (fn) => r.reduce((s, p) => s + (fn(p) || 0), 0);
@@ -525,18 +543,11 @@ export default {
 			this.store.reload();
 		},
 		card(key, label, value, sub, cur, prev, invert, tip) {
-			let delta = null, deltaText = "", deltaClass = "";
-			if (prev != null && prev !== 0) {
-				const pct = Math.round(((cur - prev) / Math.abs(prev)) * 100);
-				delta = pct;
-				const up = pct > 0;
-				deltaText = (up ? "▲ +" : pct < 0 ? "▼ " : "= ") + pct + "%";
-				const good = invert ? pct <= 0 : pct >= 0;
-				deltaClass = pct === 0 ? "flat" : good ? "good" : "bad";
-			} else if (prev === 0 && cur > 0) {
-				delta = 100; deltaText = "▲ nouveau"; deltaClass = invert ? "bad" : "good";
-			}
-			return { key, label, value, sub, delta, deltaText, deltaClass, tone: "", tip };
+			const variation = periodVariation(cur, prev, invert);
+			const deltaTip = variation.insignificant
+				? __("Variation non significative : la période précédente représente moins de 5 % de la valeur actuelle, le pourcentage n'est pas comparable.")
+				: __("Variation vs période précédente de même durée");
+			return { key, label, value, sub, tip, deltaTip, tone: "", ...variation };
 		},
 		toggleAlert(key) {
 			// Certaines alertes ouvrent directement une liste (les autres filtrent
@@ -686,6 +697,11 @@ export default {
 	font-size: 12px; line-height: 1.45; box-shadow: 0 6px 24px rgba(0,0,0,.28);
 }
 .vtc-kpi-value { font-size: 28px; font-weight: 720; margin: 6px 0 2px; line-height: 1.1; }
+.vtc-kpi-value.with-margin { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.vtc-sel-margin { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; cursor: help; }
+.vtc-sel-margin .lbl { font-size: 10px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted, #6c7680); }
+.vtc-sel-margin .pct { font-size: 18px; font-weight: 720; }
+.vtc-sel-margin .eur { font-size: 11px; font-weight: 600; color: var(--text-muted, #6c7680); }
 .vtc-kpi-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .vtc-kpi-sub { font-size: 11px; color: var(--text-muted, #9aa4ad); }
 .vtc-delta { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
