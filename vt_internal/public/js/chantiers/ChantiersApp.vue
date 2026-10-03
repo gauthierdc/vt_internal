@@ -94,7 +94,7 @@
 					<div class="vtc-kpi-value">{{ k.value }}</div>
 					<div class="vtc-kpi-foot">
 						<span class="vtc-kpi-sub">{{ k.sub }}</span>
-						<span v-if="k.delta !== null" class="vtc-delta" :class="k.deltaClass" data-tip="Variation vs période précédente de même durée">{{ k.deltaText }}</span>
+						<span v-if="k.delta !== null" class="vtc-delta" :class="k.deltaClass" :data-tip="k.deltaTip">{{ k.deltaText }}</span>
 					</div>
 				</div>
 			</div>
@@ -182,7 +182,7 @@
 							<th @click="sortBy('flux')" class="sortable" :data-tip="__('Flux financiers de la période, par chantier : 🧾 Facturé (ventes) · 🛒 Achats (commandes fournisseur) · 💳 Dépenses (notes de frais) · 🏭 Fabrication VT. Cliquer un montant ouvre la liste correspondante. Tri = total.')">{{ __('Flux (pér.)') }} <SortIc :dir="sortDir" :on="sortKey === 'flux'" /></th>
 							<th @click="sortBy('marge_reel')" class="sortable" :data-tip="__('Barre = marge réelle (vente − coûts réels) ÷ vente. Trait vertical = marge théorique (basée sur les devis). Badge = écart réel − théorique, en points.')">{{ __('Marge') }} <SortIc :dir="sortDir" :on="sortKey === 'marge_reel'" /></th>
 							<th @click="sortBy('heures_periode')" class="sortable" :data-tip="__('Heures pointées SUR LA PÉRIODE : validées + non validées (brouillon). Sous-texte : cumul total du chantier / heures prévues (vendues).')">{{ __('Pointé (pér.)') }} <SortIc :dir="sortDir" :on="sortKey === 'heures_periode'" /></th>
-							<th @click="sortBy('total_sold')" class="sortable num" :data-tip="__('Montant total du projet = somme des commandes client (Sales Orders) rattachées au chantier, HT.')">{{ __('Total projet') }} <SortIc :dir="sortDir" :on="sortKey === 'total_sold'" /></th>
+							<th @click="sortBy('total_sold')" class="sortable num" :data-tip="__('Commandé = somme des commandes client (Sales Orders) validées rattachées au chantier, HT.')">{{ __('Commandé') }} <SortIc :dir="sortDir" :on="sortKey === 'total_sold'" /></th>
 							<th @click="sortBy('pct_facture')" class="sortable" :data-tip="__('Avancement de facturation (tout l’historique) : total facturé ÷ total commandé (HT). « reste » = commandé − facturé.')">{{ __('Facturation cumul') }} <SortIc :dir="sortDir" :on="sortKey === 'pct_facture'" /></th>
 							<th @click="sortBy('retard')" class="sortable num" :data-tip="__('Jours écoulés depuis la date de fin prévue, pour les chantiers non encore facturés.')">{{ __('Retard') }} <SortIc :dir="sortDir" :on="sortKey === 'retard'" /></th>
 							<th :data-tip="__('SAV = repointage sur chantier facturé · ⚠️ = incidents qualité (cliquable) · 📝∅ = facturé sans réception · 📝 = réception présente.')">{{ __('Alertes') }}</th>
@@ -210,14 +210,14 @@
 							<td>{{ __('Total') }}</td>
 							<td>{{ totals.count }} {{ __('chantiers') }}</td>
 							<td class="vtc-flux-tot">
-								<span v-if="totals.ca" class="ft fin">🧾 {{ fmtCompact(totals.ca) }}</span>
+								<span v-if="totals.ca" class="ft fin" :data-tip="__('Facturé sur la période (HT net, avoirs déduits) : ') + fmtMoney(totals.ca)">🧾 {{ fmtCompact(totals.ca) }}</span>
 								<span v-if="totals.po" class="ft po">🛒 {{ fmtCompact(totals.po) }}</span>
 								<span v-if="totals.dep" class="ft dep">💳 {{ fmtCompact(totals.dep) }}</span>
 								<span v-if="totals.fab" class="ft fab">🏭 {{ fmtCompact(totals.fab) }}</span>
 							</td>
 							<td></td>
 							<td><b>{{ totals.hv }}h</b><span v-if="totals.hd" class="td-draft">+{{ totals.hd }}h</span></td>
-							<td class="num">{{ fmtMoney(totals.total_sold) }}</td>
+							<td class="num" :data-tip="__('Total commandé (commandes client HT) des chantiers affichés')"><span class="vtc-tot-lbl">{{ __('Commandé') }}</span> {{ fmtMoney(totals.total_sold) }}</td>
 							<td class="num" :data-tip="__('Reste à facturer cumulé')"><span v-if="totals.reste">{{ __('reste') }} {{ fmtMoney(totals.reste) }}</span></td>
 							<td></td>
 							<td></td>
@@ -241,7 +241,7 @@
 							<th>{{ __('Flux (pér.)') }}</th>
 							<th>{{ __('Marge') }}</th>
 							<th>{{ __('Pointé (pér.)') }}</th>
-							<th class="num">{{ __('Total projet') }}</th>
+							<th class="num">{{ __('Commandé') }}</th>
 							<th>{{ __('Facturation cumul') }}</th>
 							<th class="num">{{ __('Retard') }}</th>
 							<th>{{ __('Alertes') }}</th>
@@ -327,10 +327,11 @@ export default {
 		kpiCards() {
 			const k = this.kpis, pv = this.prev;
 			return [
-				this.card("ca", __("CA facturé"), fmtCompact(k.ca_periode), __("factures validées"), k.ca_periode, pv.ca_periode, false,
-					__("Somme des factures de vente validées (hors acomptes et hors avoirs) rattachées à un chantier réel (heures estimées > 1), dont la date de facturation tombe dans la période.")),
+				this.card("ca", __("CA facturé"), fmtCompact(k.ca_periode), __("HT, avoirs déduits"), k.ca_periode, pv.ca_periode, false,
+					__("Montant HT net (après remises) des factures de vente validées rattachées à un chantier, datées dans la période. Avoirs déduits, factures d'acompte exclues. Même définition que le total 🧾 du tableau.")),
+				this.margeCard(k),
 				this.card("po", __("Commandé fournisseur"), fmtCompact(k.commande_fournisseur), __("commandes fournisseur"), k.commande_fournisseur, pv.commande_fournisseur, true,
-					__("Somme des montants des lignes de commandes fournisseur (non annulées) rattachées à un chantier, dont la commande est datée dans la période.")),
+					__("Somme des montants des lignes de commandes fournisseur VALIDÉES (brouillons et annulées exclus) rattachées à un chantier, dont la commande est datée dans la période.")),
 				this.card("depenses", __("Dépenses"), fmtCompact(k.depenses), __("notes de frais"), k.depenses, pv.depenses, true,
 					__("Somme des notes de frais (dépenses) rattachées à un chantier, dont la date de dépense tombe dans la période.")),
 				this.card("fabrication", __("Fabrication VT"), fmtCompact(k.fabrication), __("coût fabrication"), k.fabrication, pv.fabrication, true,
@@ -526,7 +527,12 @@ export default {
 		},
 		card(key, label, value, sub, cur, prev, invert, tip) {
 			let delta = null, deltaText = "", deltaClass = "";
-			if (prev != null && prev !== 0) {
+			let deltaTip = __("Variation vs période précédente de même durée");
+			if (prev != null && prev !== 0 && this.isNegligiblePrev(cur, prev)) {
+				// Période précédente quasi nulle : un % n'aurait aucun sens (ex. +9 000 %).
+				delta = 0; deltaText = __("n.s."); deltaClass = "flat ns";
+				deltaTip = __("Non significatif : la période précédente ({0}) est négligeable par rapport à la période courante, la variation dépasserait ±1 000 %.", [prev.toLocaleString("fr-FR")]);
+			} else if (prev != null && prev !== 0) {
 				const pct = Math.round(((cur - prev) / Math.abs(prev)) * 100);
 				delta = pct;
 				const up = pct > 0;
@@ -536,7 +542,27 @@ export default {
 			} else if (prev === 0 && cur > 0) {
 				delta = 100; deltaText = "▲ nouveau"; deltaClass = invert ? "bad" : "good";
 			}
-			return { key, label, value, sub, delta, deltaText, deltaClass, tone: "", tip };
+			return { key, label, value, sub, delta, deltaText, deltaClass, deltaTip, tone: "", tip };
+		},
+		// Variation non significative : la période précédente pèse moins de 1 %
+		// de la période courante (en valeur absolue), ce qui donnerait une
+		// variation supérieure à ~10 000 %, ou la variation dépasse 1 000 %.
+		isNegligiblePrev(cur, prev) {
+			const c = Math.abs(cur || 0), p = Math.abs(prev || 0);
+			if (p < 0.01 * c) return true;
+			return Math.abs((cur - prev) / p) > 10;
+		},
+		// Carte Marge : Σ(vente − coût réel) ÷ Σ vente, sur les chantiers du
+		// tableau ayant du CA facturé sur la période (calcul serveur).
+		margeCard(k) {
+			const pct = k.marge_pct || 0;
+			const c = this.card("marge", __("Marge"), (Math.round(pct * 10) / 10).toLocaleString("fr-FR") + " %",
+				fmtCompact(k.marge_montant) + " " + __("sur") + " " + fmtCompact(k.marge_base_vente) + " " + __("facturés"),
+				null, null, false,
+				__("Marge réelle des {0} chantiers facturés sur la période = Σ (vente − coût réel) ÷ Σ vente. Base de vente : CA facturé CUMULÉ de ces chantiers (HT net, avoirs déduits, hors acomptes) = {1}. Coût réel cumulé = MO pointée + commandes fournisseur + matière consommée + notes de frais + fabrications VT = {2}. Marge = {3}.",
+					[k.marge_nb_chantiers || 0, fmtMoney(k.marge_base_vente), fmtMoney(k.marge_cout_reel), fmtMoney(k.marge_montant)]));
+			c.tone = pct < 0 ? "neg" : "";
+			return c;
 		},
 		toggleAlert(key) {
 			// Certaines alertes ouvrent directement une liste (les autres filtrent
@@ -692,6 +718,9 @@ export default {
 .vtc-delta.good { color: #1b7d3e; background: rgba(46,125,50,.14); }
 .vtc-delta.bad { color: #c62828; background: rgba(198,40,40,.14); }
 .vtc-delta.flat { color: var(--text-muted, #6c7680); background: var(--control-bg, #eef1f3); }
+.vtc-delta.ns { font-style: italic; }
+.vtc-kpi.neg .vtc-kpi-value { color: #c62828; }
+.vtc-tot-lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted, #6c7680); margin-right: 4px; }
 
 /* Alertes */
 .vtc-alerts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }

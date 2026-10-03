@@ -16,10 +16,27 @@ import json
 
 import frappe
 
-from vt_internal.vt_internal.utils.margin_utils import calculate_margin, get_theoretical_map
+from vt_internal.vt_internal.utils.margin_utils import (
+	calculate_margin,
+	get_real_cost_map,
+	get_theoretical_map,
+)
 
 # Types d'activité exclus du "temps chantier" (temps atelier / logistique).
 EXCLUDED_ACTIVITIES = ("Fabrication", "Livraison")
+
+
+# --- Définition UNIQUE du « CA facturé » du rapport ---------------------------
+# Montant HT net (`net_total`, après remises), factures de vente VALIDÉES
+# uniquement, avoirs (`is_return`) INCLUS — leur net_total est négatif, ils
+# viennent donc naturellement en déduction — et factures d'acompte EXCLUES.
+# Utilisée partout : carte KPI, CA par chantier (période et cumul), graphe
+# hebdomadaire et liste des factures ouverte au clic sur la carte.
+CA_AMOUNT = "si.net_total"
+CA_WHERE = (
+	"si.docstatus = 1"
+	" AND (si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)"
+)
 
 
 def _parse_list(value):
@@ -134,22 +151,38 @@ def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None):
 	)[0]
 	heures_sav = round(sav.h or 0)
 
-	# CA de la période (factures non-acompte, projets "chantiers" réels)
+	# CA facturé de la période — définition unique (cf. CA_WHERE) : HT net,
+	# avoirs déduits, hors acomptes, factures rattachées à un chantier.
 	ca = frappe.db.sql(
 		f"""
-		SELECT SUM(si.total) AS ca, SUM(si.custom_labour_hours) AS heures_facturees
+		SELECT SUM({CA_AMOUNT}) AS ca
 		FROM `tabSales Invoice` si
 		JOIN `tabProject` p ON p.name = si.project
-		WHERE si.docstatus = 1 AND si.is_return = 0
-		  AND (si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)
-		  AND p.custom_estimated_labor_hours > 1
+		WHERE {CA_WHERE}
 		  AND si.posting_date BETWEEN %s AND %s{comp_si}{cm_sql}
 		""",
 		tuple([start_date, end_date, *comp_psi, *cm_p]),
 		as_dict=True,
 	)[0]
 	ca_periode = round(ca.ca or 0)
-	heures_facturees = round(ca.heures_facturees or 0)
+
+	# Heures facturées (main-d'œuvre portée par les factures) : indicateur
+	# d'HEURES, comparé aux heures réalisées. On y garde le périmètre historique
+	# « vrais chantiers » (heures estimées > 1, hors avoirs) : c'est le seul
+	# endroit où ce filtre a encore un sens.
+	hf = frappe.db.sql(
+		f"""
+		SELECT SUM(si.custom_labour_hours) AS heures_facturees
+		FROM `tabSales Invoice` si
+		JOIN `tabProject` p ON p.name = si.project
+		WHERE {CA_WHERE} AND si.is_return = 0
+		  AND p.custom_estimated_labor_hours > 1
+		  AND si.posting_date BETWEEN %s AND %s{comp_si}{cm_sql}
+		""",
+		tuple([start_date, end_date, *comp_psi, *cm_p]),
+		as_dict=True,
+	)[0]
+	heures_facturees = round(hf.heures_facturees or 0)
 	pct_heures = round(heures_facturees / heures_realisees * 100) if heures_realisees > 0 else 0
 
 	# Nb de chantiers distincts pointés (validé ou brouillon) sur la période
@@ -166,7 +199,8 @@ def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None):
 		as_dict=True,
 	)[0]
 
-	# Montant commandé en commandes fournisseur sur la période (lignes liées à un projet)
+	# Montant commandé en commandes fournisseur sur la période (lignes liées à
+	# un projet). Commandes VALIDÉES uniquement (brouillons exclus).
 	comp_po = " AND po.company = %s" if company else ""
 	comp_po_p = [company] if company else []
 	po_join = " JOIN `tabProject` p ON p.name = poi.project" if proj_join else ""
@@ -175,7 +209,7 @@ def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None):
 		SELECT SUM(poi.amount) AS montant
 		FROM `tabPurchase Order Item` poi
 		JOIN `tabPurchase Order` po ON po.name = poi.parent{po_join}
-		WHERE po.docstatus < 2
+		WHERE po.docstatus = 1
 		  AND poi.project IS NOT NULL AND poi.project != ''
 		  AND po.transaction_date BETWEEN %s AND %s{comp_po}{cm_sql}
 		""",
@@ -232,6 +266,19 @@ def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None):
 	}
 
 
+def _margin_kpi(rows):
+	"""Marge agrégée Σ(vente − coût réel) / Σ vente sur des lignes projet."""
+	vente = sum(r["billed_all"] for r in rows)
+	cost = sum(r["real_cost"] for r in rows)
+	return {
+		"marge_montant": round(vente - cost),
+		"marge_pct": round(calculate_margin(vente, cost), 1),
+		"marge_base_vente": round(vente),
+		"marge_cout_reel": round(cost),
+		"marge_nb_chantiers": len(rows),
+	}
+
+
 @frappe.whitelist()
 def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None, cost_center=None):
 	"""Point d'entrée principal de la vue Chantiers.
@@ -279,7 +326,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	)
 	hours_map = {r.project: r for r in rows}
 
-	# --- Commandes fournisseur passées sur la période (par projet) -------------
+	# --- Commandes fournisseur validées sur la période (par projet) ------------
 	# Créer une commande fournisseur sur la période fait aussi "entrer" le
 	# chantier dans la période (même sans pointage).
 	comp_po = " AND po.company = %s" if company else ""
@@ -290,7 +337,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		SELECT poi.project AS project, SUM(poi.amount) AS montant
 		FROM `tabPurchase Order Item` poi
 		JOIN `tabPurchase Order` po ON po.name = poi.parent{po_cm_join}
-		WHERE po.docstatus < 2
+		WHERE po.docstatus = 1
 		  AND poi.project IS NOT NULL AND poi.project != ''
 		  AND po.transaction_date BETWEEN %s AND %s{comp_po}{cm_sql}
 		GROUP BY poi.project
@@ -336,14 +383,13 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	)
 	fab_map = {r.project: round(r.montant or 0) for r in fab_rows}
 
-	# --- CA facturé par projet sur la période ---------------------------------
+	# --- CA facturé par projet sur la période (même définition que le KPI) ---
 	si_cm_join = " JOIN `tabProject` p ON p.name = si.project" if proj_join else ""
 	ca_period_rows = frappe.db.sql(
 		f"""
-		SELECT si.project AS project, SUM(si.total) AS ca
+		SELECT si.project AS project, SUM({CA_AMOUNT}) AS ca
 		FROM `tabSales Invoice` si{si_cm_join}
-		WHERE si.docstatus = 1 AND si.is_return = 0
-		  AND (si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)
+		WHERE {CA_WHERE}
 		  AND si.project IS NOT NULL AND si.project != ''
 		  AND si.posting_date BETWEEN %s AND %s{comp_si}{cm_sql}
 		GROUP BY si.project
@@ -351,7 +397,9 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		tuple([start_date, end_date, *comp_psi, *cm_p]),
 		as_dict=True,
 	)
-	ca_map = {r.project: round(r.ca or 0) for r in ca_period_rows}
+	# Arrondi au centime (et non à l'euro) : la somme des lignes (pied 🧾 du
+	# tableau) retombe ainsi exactement sur le KPI, arrondi une seule fois.
+	ca_map = {r.project: round(r.ca or 0, 2) for r in ca_period_rows}
 
 	# Chantiers de la période : il s'est passé QUELQUE CHOSE dessus, c.-à-d.
 	# pointage OU facturation OU commande fournisseur OU dépense OU fabrication.
@@ -404,23 +452,22 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	billed_all_map, last_activity_map = {}, {}
 	reception_map, incident_map = {}, {}
 	meta_map, theo_map = {}, {}
-	po_all_map, fab_all_map, expected_map, actual_map, so_total_map = {}, {}, {}, {}, {}
+	real_cost_map, expected_map, actual_map, so_total_map = {}, {}, {}, {}
 	if project_names:
 		ph = ",".join(["%s"] * len(project_names))
 
 		for r in frappe.db.sql(
 			f"""
-			SELECT si.project, SUM(si.total) AS ca
+			SELECT si.project, SUM({CA_AMOUNT}) AS ca
 			FROM `tabSales Invoice` si
-			WHERE si.docstatus = 1 AND si.is_return = 0
-			  AND (si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)
+			WHERE {CA_WHERE}
 			  AND si.project IN ({ph})
 			GROUP BY si.project
 			""",
 			tuple(project_names),
 			as_dict=True,
 		):
-			billed_all_map[r.project] = round(r.ca or 0)
+			billed_all_map[r.project] = round(r.ca or 0, 2)
 
 		for r in frappe.db.sql(
 			f"""
@@ -453,8 +500,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		for r in frappe.db.sql(
 			f"""
 			SELECT name, status, project_type, expected_end_date, customer,
-			       total_sales_amount, custom_construction_manager, custom_project_manager,
-			       total_costing_amount, total_consumed_material_cost, total_expense_claim
+			       total_sales_amount, custom_construction_manager, custom_project_manager
 			FROM `tabProject` WHERE name IN ({ph})
 			""",
 			tuple(project_names), as_dict=True,
@@ -466,24 +512,12 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		for name, (vente, cost) in get_theoretical_map(project_names).items():
 			theo_map[name] = {"vente": vente, "cost": cost}
 
-		# Coûts réels : commandes fournisseur + fabrications (tout l'historique)
-		for r in frappe.db.sql(
-			f"""
-			SELECT poi.project AS project, SUM(poi.amount) AS total
-			FROM `tabPurchase Order Item` poi
-			JOIN `tabPurchase Order` po ON po.name = poi.parent
-			WHERE poi.project IN ({ph}) AND po.docstatus < 2
-			GROUP BY poi.project
-			""", tuple(project_names), as_dict=True):
-			po_all_map[r.project] = r.total or 0
-		for r in frappe.db.sql(
-			f"""
-			SELECT project, SUM(manufacturing_costs) AS total
-			FROM `tabFabrication VT`
-			WHERE project IN ({ph}) AND docstatus < 2
-			GROUP BY project
-			""", tuple(project_names), as_dict=True):
-			fab_all_map[r.project] = r.total or 0
+		# Coûts réels (tout l'historique) — même formule que get_project_costs :
+		# MO pointée + commandes fournisseur + matière consommée + notes de
+		# frais + fabrications VT.
+		real_cost_map = {
+			name: c["total_real_cost"] for name, c in get_real_cost_map(project_names).items()
+		}
 
 		# Heures prévues (Sales Order) et réalisées (Timesheet) — remplace
 		# get_project_labour_hours.
@@ -524,13 +558,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		theo_vente = theo.get("vente", 0)
 		theo_cost = theo.get("cost", 0)
 		theo_margin = calculate_margin(theo_vente, theo_cost)
-		real_cost = (
-			(p.total_costing_amount or 0)
-			+ po_all_map.get(name, 0)
-			+ (p.total_consumed_material_cost or 0)
-			+ (p.total_expense_claim or 0)
-			+ fab_all_map.get(name, 0)
-		)
+		real_cost = real_cost_map.get(name, 0)
 		real_margin = calculate_margin(theo_vente, real_cost)
 
 		hm = hours_map.get(name)
@@ -544,7 +572,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		total_sold = so_total_map.get(name, 0) or round(p.total_sales_amount or 0)
 		billed_all = billed_all_map.get(name, 0)
 		pct_facture = round(billed_all / total_sold * 100) if total_sold > 0 else 0
-		reste_a_facturer = max(0, total_sold - billed_all)
+		reste_a_facturer = round(max(0, total_sold - billed_all))
 
 		retard = 0
 		if p.expected_end_date and not is_facture:
@@ -571,6 +599,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 			"marge_theo": round(theo_margin),
 			"marge_reel": round(real_margin),
 			"marge_diff": round(real_margin - theo_margin),
+			"real_cost": round(real_cost),
 			"heures_val": h_val,
 			"heures_draft": h_draft,
 			"heures_total": hours_total,
@@ -594,6 +623,15 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	# partagent la même forme de ligne (construite ci-dessus).
 	projects = [rows_by_name[n] for n in period_names if n in rows_by_name]
 	sans_pointage = [rows_by_name[n] for n in decroche_names if n in rows_by_name]
+
+	# --- KPI Marge des chantiers facturés sur la période -----------------------
+	# Périmètre : chantiers du tableau ayant du CA facturé sur la période.
+	# Base de vente : CA facturé CUMULÉ de ces chantiers (même définition que le
+	# KPI CA : HT net, avoirs déduits, hors acomptes), rapproché de leurs coûts
+	# réels cumulés (même formule que la colonne Marge). On compare ainsi des
+	# cumuls à des cumuls : un chantier facturé en plusieurs fois n'est pas
+	# pénalisé par des coûts engagés avant la période.
+	kpis.update(_margin_kpi([r for r in projects if r["ca_periode"]]))
 
 	# --- Heures hors chantier par activité (vide si filtre conducteur) --------
 	activity = frappe.db.sql(
@@ -642,12 +680,10 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	ca_week = frappe.db.sql(
 		f"""
 		SELECT DATE(DATE_SUB(si.posting_date, INTERVAL WEEKDAY(si.posting_date) DAY)) AS wk,
-		       SUM(si.total) AS ca
+		       SUM({CA_AMOUNT}) AS ca
 		FROM `tabSales Invoice` si
 		JOIN `tabProject` p ON p.name = si.project
-		WHERE si.docstatus = 1 AND si.is_return = 0
-		  AND (si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)
-		  AND p.custom_estimated_labor_hours > 1
+		WHERE {CA_WHERE}
 		  AND si.posting_date BETWEEN %s AND %s{comp_si}{cm_sql}
 		GROUP BY wk ORDER BY wk
 		""",
@@ -671,7 +707,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	)
 	wk_map = {}
 	for r in ca_week:
-		wk_map.setdefault(str(r.wk), {"ca": 0, "val": 0, "draft": 0})["ca"] = round(r.ca or 0)
+		wk_map.setdefault(str(r.wk), {"ca": 0, "val": 0, "draft": 0})["ca"] = round(r.ca or 0, 2)
 	for r in hours_week:
 		e = wk_map.setdefault(str(r.wk), {"ca": 0, "val": 0, "draft": 0})
 		e["val"] = round(r.val or 0)
@@ -734,9 +770,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		f"""
 		SELECT si.name FROM `tabSales Invoice` si
 		JOIN `tabProject` p ON p.name = si.project
-		WHERE si.docstatus = 1 AND si.is_return = 0
-		  AND (si.is_down_payment_invoice = 0 OR si.is_down_payment_invoice IS NULL)
-		  AND p.custom_estimated_labor_hours > 1
+		WHERE {CA_WHERE}
 		  AND si.posting_date BETWEEN %s AND %s{comp_si}{cm_sql}
 		""",
 		[start_date, end_date, *comp_psi, *cm_p],
@@ -746,7 +780,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		f"""
 		SELECT DISTINCT po.name FROM `tabPurchase Order Item` poi
 		JOIN `tabPurchase Order` po ON po.name = poi.parent{po_join2}
-		WHERE po.docstatus < 2 AND poi.project IS NOT NULL AND poi.project != ''
+		WHERE po.docstatus = 1 AND poi.project IS NOT NULL AND poi.project != ''
 		  AND po.transaction_date BETWEEN %s AND %s{comp_po}{cm_sql}
 		""",
 		[start_date, end_date, *comp_po_p, *cm_p],

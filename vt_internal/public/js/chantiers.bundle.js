@@ -140,7 +140,8 @@ class ChantiersView {
 			["marge_reel", "Marge réel %"], ["marge_diff", "Écart marge"],
 			["heures_val", "Heures validées"], ["heures_draft", "Heures non validées"],
 			["heures_total", "Heures totales"], ["heures_expected", "Heures prévues"],
-			["heures_diff", "Écart heures"], ["pct_facture", "% facturé"],
+			["heures_diff", "Écart heures"], ["total_sold", "Commandé"],
+			["billed_all", "Facturé cumul"], ["pct_facture", "% facturé"],
 			["reste_a_facturer", "Reste à facturer"], ["retard", "Retard (j)"],
 			["nb_incidents", "Incidents"], ["is_sav", "SAV"],
 		];
