@@ -140,12 +140,16 @@ class ChantiersView {
 			["marge_reel", "Marge réel %"], ["marge_diff", "Écart marge"],
 			["heures_val", "Heures validées"], ["heures_draft", "Heures non validées"],
 			["heures_total", "Heures totales"], ["heures_expected", "Heures prévues"],
-			["heures_diff", "Écart heures"], ["total_sold", "Commandé"],
+			["heures_diff", "Écart heures"], ["total_sold", "Commandé client"],
 			["billed_all", "Facturé cumul"], ["pct_facture", "% facturé"],
 			["reste_a_facturer", "Reste à facturer"], ["retard", "Retard (j)"],
 			["nb_incidents", "Incidents"], ["is_sav", "SAV"],
 		];
-		const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+		// Montants arrondis à l'euro (le CA par chantier est au centime côté API).
+		const esc = (v) => {
+			if (typeof v === "number") v = Math.round(v);
+			return `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+		};
 		const lines = [cols.map((c) => esc(c[1])).join(",")];
 		d.projects.forEach((p) => lines.push(cols.map((c) => esc(p[c[0]])).join(",")));
 		const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });

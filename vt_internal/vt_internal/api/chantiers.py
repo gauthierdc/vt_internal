@@ -200,7 +200,7 @@ def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None):
 	)[0]
 
 	# Montant commandé en commandes fournisseur sur la période (lignes liées à
-	# un projet). Commandes VALIDÉES uniquement (brouillons exclus).
+	# un projet). Commandes non annulées (brouillons inclus).
 	comp_po = " AND po.company = %s" if company else ""
 	comp_po_p = [company] if company else []
 	po_join = " JOIN `tabProject` p ON p.name = poi.project" if proj_join else ""
@@ -209,7 +209,7 @@ def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None):
 		SELECT SUM(poi.amount) AS montant
 		FROM `tabPurchase Order Item` poi
 		JOIN `tabPurchase Order` po ON po.name = poi.parent{po_join}
-		WHERE po.docstatus = 1
+		WHERE po.docstatus < 2
 		  AND poi.project IS NOT NULL AND poi.project != ''
 		  AND po.transaction_date BETWEEN %s AND %s{comp_po}{cm_sql}
 		""",
@@ -266,19 +266,6 @@ def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None):
 	}
 
 
-def _margin_kpi(rows):
-	"""Marge agrégée Σ(vente − coût réel) / Σ vente sur des lignes projet."""
-	vente = sum(r["billed_all"] for r in rows)
-	cost = sum(r["real_cost"] for r in rows)
-	return {
-		"marge_montant": round(vente - cost),
-		"marge_pct": round(calculate_margin(vente, cost), 1),
-		"marge_base_vente": round(vente),
-		"marge_cout_reel": round(cost),
-		"marge_nb_chantiers": len(rows),
-	}
-
-
 @frappe.whitelist()
 def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None, cost_center=None):
 	"""Point d'entrée principal de la vue Chantiers.
@@ -326,7 +313,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	)
 	hours_map = {r.project: r for r in rows}
 
-	# --- Commandes fournisseur validées sur la période (par projet) ------------
+	# --- Commandes fournisseur passées sur la période (par projet) -------------
 	# Créer une commande fournisseur sur la période fait aussi "entrer" le
 	# chantier dans la période (même sans pointage).
 	comp_po = " AND po.company = %s" if company else ""
@@ -337,7 +324,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		SELECT poi.project AS project, SUM(poi.amount) AS montant
 		FROM `tabPurchase Order Item` poi
 		JOIN `tabPurchase Order` po ON po.name = poi.parent{po_cm_join}
-		WHERE po.docstatus = 1
+		WHERE po.docstatus < 2
 		  AND poi.project IS NOT NULL AND poi.project != ''
 		  AND po.transaction_date BETWEEN %s AND %s{comp_po}{cm_sql}
 		GROUP BY poi.project
@@ -519,11 +506,13 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 			name: c["total_real_cost"] for name, c in get_real_cost_map(project_names).items()
 		}
 
-		# Heures prévues (Sales Order) et réalisées (Timesheet) — remplace
-		# get_project_labour_hours.
+		# Heures prévues et « Commandé client » (Sales Order) et heures réalisées
+		# (Timesheet) — remplace get_project_labour_hours. Commandé en `net_total`
+		# (HT après remises), même base que le CA facturé : un chantier remisé
+		# entièrement facturé tombe bien à 100 % / reste 0.
 		for r in frappe.db.sql(
 			f"""
-			SELECT project, SUM(custom_labour_hours) AS h, SUM(total) AS montant
+			SELECT project, SUM(custom_labour_hours) AS h, SUM(net_total) AS montant
 			FROM `tabSales Order`
 			WHERE project IN ({ph}) AND docstatus = 1 AND custom_exclude_from_statistics != 1
 			GROUP BY project
@@ -567,7 +556,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		hours_expected = round(expected_map.get(name, 0))
 		hours_total = round(actual_map.get(name, 0))
 
-		# Montant total du projet = somme des commandes client (Sales Orders),
+		# Commandé client = somme des commandes client (Sales Orders, HT net),
 		# avec repli sur total_sales_amount si aucune commande.
 		total_sold = so_total_map.get(name, 0) or round(p.total_sales_amount or 0)
 		billed_all = billed_all_map.get(name, 0)
@@ -599,7 +588,6 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 			"marge_theo": round(theo_margin),
 			"marge_reel": round(real_margin),
 			"marge_diff": round(real_margin - theo_margin),
-			"real_cost": round(real_cost),
 			"heures_val": h_val,
 			"heures_draft": h_draft,
 			"heures_total": hours_total,
@@ -623,15 +611,6 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 	# partagent la même forme de ligne (construite ci-dessus).
 	projects = [rows_by_name[n] for n in period_names if n in rows_by_name]
 	sans_pointage = [rows_by_name[n] for n in decroche_names if n in rows_by_name]
-
-	# --- KPI Marge des chantiers facturés sur la période -----------------------
-	# Périmètre : chantiers du tableau ayant du CA facturé sur la période.
-	# Base de vente : CA facturé CUMULÉ de ces chantiers (même définition que le
-	# KPI CA : HT net, avoirs déduits, hors acomptes), rapproché de leurs coûts
-	# réels cumulés (même formule que la colonne Marge). On compare ainsi des
-	# cumuls à des cumuls : un chantier facturé en plusieurs fois n'est pas
-	# pénalisé par des coûts engagés avant la période.
-	kpis.update(_margin_kpi([r for r in projects if r["ca_periode"]]))
 
 	# --- Heures hors chantier par activité (vide si filtre conducteur) --------
 	activity = frappe.db.sql(
@@ -780,7 +759,7 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 		f"""
 		SELECT DISTINCT po.name FROM `tabPurchase Order Item` poi
 		JOIN `tabPurchase Order` po ON po.name = poi.parent{po_join2}
-		WHERE po.docstatus = 1 AND poi.project IS NOT NULL AND poi.project != ''
+		WHERE po.docstatus < 2 AND poi.project IS NOT NULL AND poi.project != ''
 		  AND po.transaction_date BETWEEN %s AND %s{comp_po}{cm_sql}
 		""",
 		[start_date, end_date, *comp_po_p, *cm_p],
