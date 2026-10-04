@@ -25,6 +25,7 @@ function readUrlFilters() {
 	if (q.get("company")) f.company = q.get("company");
 	if (q.get("cm")) f.conducteurs = q.get("cm").split(",").filter(Boolean);
 	if (q.get("cc")) f.cost_center = q.get("cc");
+	if (q.get("pt")) f.project_types = q.get("pt").split(",").filter(Boolean);
 	return f;
 }
 
@@ -44,6 +45,7 @@ class ChantiersView {
 				company: null,
 				conducteurs: [],
 				cost_center: null,
+				project_types: [],
 				// Écrase les valeurs par défaut avec celles de l'URL si présentes.
 				...readUrlFilters(),
 			},
@@ -64,7 +66,7 @@ class ChantiersView {
 	}
 
 	setup_filters() {
-		// Tous les filtres (période, société, conducteurs) sont pilotés depuis
+		// Tous les filtres (période, société, conducteurs, types) sont pilotés depuis
 		// l'app Vue : plus visibles et plus fiables que les champs de la barre.
 		this.page.clear_fields();
 	}
@@ -93,6 +95,7 @@ class ChantiersView {
 		if (f.company) q.set("company", f.company);
 		if (f.conducteurs && f.conducteurs.length) q.set("cm", f.conducteurs.join(","));
 		if (f.cost_center) q.set("cc", f.cost_center);
+		if (f.project_types && f.project_types.length) q.set("pt", f.project_types.join(","));
 		const qs = q.toString();
 		const url = window.location.pathname + (qs ? "?" + qs : "");
 		window.history.replaceState(window.history.state, "", url);
@@ -114,6 +117,7 @@ class ChantiersView {
 				company: f.company || undefined,
 				conducteurs: f.conducteurs && f.conducteurs.length ? JSON.stringify(f.conducteurs) : undefined,
 				cost_center: f.cost_center || undefined,
+				project_types: f.project_types && f.project_types.length ? JSON.stringify(f.project_types) : undefined,
 			},
 			callback: (r) => {
 				if (r && r.message) this.store.data = r.message;
@@ -140,11 +144,16 @@ class ChantiersView {
 			["marge_reel", "Marge réel %"], ["marge_diff", "Écart marge"],
 			["heures_val", "Heures validées"], ["heures_draft", "Heures non validées"],
 			["heures_total", "Heures totales"], ["heures_expected", "Heures prévues"],
-			["heures_diff", "Écart heures"], ["pct_facture", "% facturé"],
+			["heures_diff", "Écart heures"], ["total_sold", "Commandé client"],
+			["billed_all", "Facturé cumul"], ["pct_facture", "% facturé"],
 			["reste_a_facturer", "Reste à facturer"], ["retard", "Retard (j)"],
 			["nb_incidents", "Incidents"], ["is_sav", "SAV"],
 		];
-		const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+		// Montants arrondis à l'euro (le CA par chantier est au centime côté API).
+		const esc = (v) => {
+			if (typeof v === "number") v = Math.round(v);
+			return `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+		};
 		const lines = [cols.map((c) => esc(c[1])).join(",")];
 		d.projects.forEach((p) => lines.push(cols.map((c) => esc(p[c[0]])).join(",")));
 		const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });

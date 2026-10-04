@@ -159,13 +159,93 @@ def get_theoretical_map(projects, analysis_axis="global"):
     }
 
 
+def get_real_cost_map(projects):
+    """
+    Coûts réels par projet, en batch (3 requêtes quel que soit le nombre de
+    projets). Formule unique du « coût réel » :
+
+        MO pointée (total_costing_amount)
+        + commandes fournisseur (lignes rattachées au projet, non annulées)
+        + matière consommée (total_consumed_material_cost)
+        + notes de frais (total_expense_claim)
+        + fabrications VT (non annulées)
+
+    Args:
+        projects: liste de noms de projets (ou un nom seul)
+
+    Returns:
+        dict: {projet: {
+            'total_costing_amount', 'total_purchase_order',
+            'total_consumed_material_cost', 'total_expense_claim',
+            'total_manufacturing_cost', 'total_real_cost'
+        }} — un projet inconnu a tous ses montants à 0.
+    """
+    if not projects:
+        return {}
+    if isinstance(projects, str):
+        projects = [projects]
+    projects = list(dict.fromkeys(projects))
+    placeholders = ", ".join(["%s"] * len(projects))
+    params = tuple(projects)
+
+    native = {
+        r["name"]: r
+        for r in frappe.db.sql(
+            f"""
+            SELECT name, total_costing_amount, total_consumed_material_cost, total_expense_claim
+            FROM `tabProject`
+            WHERE name IN ({placeholders})
+            """,
+            params,
+            as_dict=1,
+        )
+    }
+    purchase_orders = dict(
+        frappe.db.sql(
+            f"""
+            SELECT poi.project, COALESCE(SUM(poi.amount), 0)
+            FROM `tabPurchase Order Item` poi
+            INNER JOIN `tabPurchase Order` po ON po.name = poi.parent
+            WHERE poi.project IN ({placeholders}) AND po.docstatus < 2
+            GROUP BY poi.project
+            """,
+            params,
+        )
+    )
+    manufacturing = dict(
+        frappe.db.sql(
+            f"""
+            SELECT project, COALESCE(SUM(manufacturing_costs), 0)
+            FROM `tabFabrication VT`
+            WHERE project IN ({placeholders}) AND docstatus < 2
+            GROUP BY project
+            """,
+            params,
+        )
+    )
+
+    result = {}
+    for name in projects:
+        project = native.get(name) or {}
+        costs = {
+            "total_costing_amount": project.get("total_costing_amount") or 0,
+            "total_purchase_order": purchase_orders.get(name) or 0,
+            "total_consumed_material_cost": project.get("total_consumed_material_cost") or 0,
+            "total_expense_claim": project.get("total_expense_claim") or 0,
+            "total_manufacturing_cost": manufacturing.get(name) or 0,
+        }
+        costs["total_real_cost"] = sum(costs.values())
+        result[name] = costs
+    return result
+
+
 def get_project_costs(project_name):
     """
-    Récupère les coûts réels d'un projet.
-    
+    Récupère les coûts réels d'un projet (cf. get_real_cost_map pour la formule).
+
     Args:
         project_name: Le nom du projet
-        
+
     Returns:
         dict: {
             'total_costing_amount': float,  # MO (timesheets)
@@ -176,49 +256,7 @@ def get_project_costs(project_name):
             'total_real_cost': float,  # Total de tous les coûts
         }
     """
-    # Récupérer les champs natifs du projet
-    project = frappe.db.get_value(
-        "Project",
-        project_name,
-        ["total_costing_amount", "total_consumed_material_cost", "total_expense_claim"],
-        as_dict=True
-    ) or {}
-    
-    total_costing_amount = project.get("total_costing_amount") or 0
-    total_consumed_material_cost = project.get("total_consumed_material_cost") or 0
-    total_expense_claim = project.get("total_expense_claim") or 0
-    
-    # Calculer total_purchase_order via SQL
-    total_purchase_order = frappe.db.sql("""
-        SELECT COALESCE(SUM(poi.amount), 0) as total
-        FROM `tabPurchase Order Item` poi
-        INNER JOIN `tabPurchase Order` po ON po.name = poi.parent
-        WHERE poi.project = %s AND po.docstatus < 2
-    """, project_name)[0][0] or 0
-    
-    # Calculer total_manufacturing_cost via SQL
-    total_manufacturing_cost = frappe.db.sql("""
-        SELECT COALESCE(SUM(manufacturing_costs), 0) as total
-        FROM `tabFabrication VT`
-        WHERE project = %s AND docstatus < 2
-    """, project_name)[0][0] or 0
-    
-    total_real_cost = (
-        total_costing_amount +
-        total_purchase_order +
-        total_consumed_material_cost +
-        total_expense_claim +
-        total_manufacturing_cost
-    )
-    
-    return {
-        'total_costing_amount': total_costing_amount,
-        'total_purchase_order': total_purchase_order,
-        'total_consumed_material_cost': total_consumed_material_cost,
-        'total_expense_claim': total_expense_claim,
-        'total_manufacturing_cost': total_manufacturing_cost,
-        'total_real_cost': total_real_cost,
-    }
+    return get_real_cost_map([project_name])[project_name]
 
 
 def calculate_margin(vente, cost):

@@ -66,7 +66,25 @@
 				@update:model-value="(v) => { store.filters.cost_center = v || null; store.reload(); }"
 			/>
 
-			<button v-if="selectedCM.length || store.filters.company || store.filters.cost_center" class="vtc-clearall" @click="clearGlobal">
+			<!-- Types de projet (multi-sélection, aucun coché = tous) -->
+			<div class="vtc-ms" v-if="data.meta.project_types && data.meta.project_types.length">
+				<button class="vtc-ms-btn" :class="{ on: selectedPT.length }" @click="ptOpen = !ptOpen"
+					:data-tip="__('Restreint tout le rapport (KPI, tableau, graphes, listes) aux chantiers des types cochés. Aucun coché = tous les types.')">
+					🏷️ {{ projectTypeLabel }} <span class="caret">▾</span>
+				</button>
+				<template v-if="ptOpen">
+					<div class="vtc-ms-backdrop" @click="ptOpen = false"></div>
+					<div class="vtc-ms-pop">
+						<label class="vtc-ms-opt all" @click="clearPT">{{ __('Tous les types') }}</label>
+						<label class="vtc-ms-opt" v-for="t in data.meta.project_types" :key="t.value">
+							<input type="checkbox" :value="t.value" v-model="selectedPT" @change="applyPT" />
+							{{ t.label }}
+						</label>
+					</div>
+				</template>
+			</div>
+
+			<button v-if="selectedCM.length || selectedPT.length || store.filters.company || store.filters.cost_center" class="vtc-clearall" @click="clearGlobal">
 				✕ {{ __('Réinitialiser') }}
 			</button>
 		</div>
@@ -94,7 +112,7 @@
 					<div class="vtc-kpi-value">{{ k.value }}</div>
 					<div class="vtc-kpi-foot">
 						<span class="vtc-kpi-sub">{{ k.sub }}</span>
-						<span v-if="k.delta !== null" class="vtc-delta" :class="k.deltaClass" data-tip="Variation vs période précédente de même durée">{{ k.deltaText }}</span>
+						<span v-if="k.delta !== null" class="vtc-delta" :class="k.deltaClass" :data-tip="k.deltaTip">{{ k.deltaText }}</span>
 					</div>
 				</div>
 			</div>
@@ -157,12 +175,6 @@
 						@click="fluxFilter[ft.key] = !fluxFilter[ft.key]"
 					>{{ ft.icon }} {{ ft.label }}</button>
 				</div>
-				<DropSelect
-					icon="🏷️"
-					v-model="facetType"
-					:all-label="__('Tous les types')"
-					:options="typeOptions.map((t) => ({ value: t, label: t }))"
-				/>
 				<div class="vtc-seg" :data-tip="__('Avancement de facturation = facturé ÷ commandé.')">
 					<button :class="{ active: facBilling === '' }" @click="facBilling = ''">{{ __('Facturation') }}</button>
 					<button :class="{ active: facBilling === 'full' }" @click="facBilling = 'full'">{{ __('100 %') }}</button>
@@ -182,7 +194,7 @@
 							<th @click="sortBy('flux')" class="sortable" :data-tip="__('Flux financiers de la période, par chantier : 🧾 Facturé (ventes) · 🛒 Achats (commandes fournisseur) · 💳 Dépenses (notes de frais) · 🏭 Fabrication VT. Cliquer un montant ouvre la liste correspondante. Tri = total.')">{{ __('Flux (pér.)') }} <SortIc :dir="sortDir" :on="sortKey === 'flux'" /></th>
 							<th @click="sortBy('marge_reel')" class="sortable" :data-tip="__('Barre = marge réelle (vente − coûts réels) ÷ vente. Trait vertical = marge théorique (basée sur les devis). Badge = écart réel − théorique, en points.')">{{ __('Marge') }} <SortIc :dir="sortDir" :on="sortKey === 'marge_reel'" /></th>
 							<th @click="sortBy('heures_periode')" class="sortable" :data-tip="__('Heures pointées SUR LA PÉRIODE : validées + non validées (brouillon). Sous-texte : cumul total du chantier / heures prévues (vendues).')">{{ __('Pointé (pér.)') }} <SortIc :dir="sortDir" :on="sortKey === 'heures_periode'" /></th>
-							<th @click="sortBy('total_sold')" class="sortable num" :data-tip="__('Montant total du projet = somme des commandes client (Sales Orders) rattachées au chantier, HT.')">{{ __('Total projet') }} <SortIc :dir="sortDir" :on="sortKey === 'total_sold'" /></th>
+							<th @click="sortBy('total_sold')" class="sortable num" :data-tip="__('Commandé client = somme des commandes client (Sales Orders) validées rattachées au chantier, HT net (après remises), même base que le facturé.')">{{ __('Commandé client') }} <SortIc :dir="sortDir" :on="sortKey === 'total_sold'" /></th>
 							<th @click="sortBy('pct_facture')" class="sortable" :data-tip="__('Avancement de facturation (tout l’historique) : total facturé ÷ total commandé (HT). « reste » = commandé − facturé.')">{{ __('Facturation cumul') }} <SortIc :dir="sortDir" :on="sortKey === 'pct_facture'" /></th>
 							<th @click="sortBy('retard')" class="sortable num" :data-tip="__('Jours écoulés depuis la date de fin prévue, pour les chantiers non encore facturés.')">{{ __('Retard') }} <SortIc :dir="sortDir" :on="sortKey === 'retard'" /></th>
 							<th :data-tip="__('SAV = repointage sur chantier facturé · ⚠️ = incidents qualité (cliquable) · 📝∅ = facturé sans réception · 📝 = réception présente.')">{{ __('Alertes') }}</th>
@@ -210,14 +222,14 @@
 							<td>{{ __('Total') }}</td>
 							<td>{{ totals.count }} {{ __('chantiers') }}</td>
 							<td class="vtc-flux-tot">
-								<span v-if="totals.ca" class="ft fin">🧾 {{ fmtCompact(totals.ca) }}</span>
+								<span v-if="totals.ca" class="ft fin" :data-tip="__('Facturé sur la période (HT net, avoirs déduits) : ') + fmtMoney(totals.ca)">🧾 {{ fmtCompact(totals.ca) }}</span>
 								<span v-if="totals.po" class="ft po">🛒 {{ fmtCompact(totals.po) }}</span>
 								<span v-if="totals.dep" class="ft dep">💳 {{ fmtCompact(totals.dep) }}</span>
 								<span v-if="totals.fab" class="ft fab">🏭 {{ fmtCompact(totals.fab) }}</span>
 							</td>
 							<td></td>
 							<td><b>{{ totals.hv }}h</b><span v-if="totals.hd" class="td-draft">+{{ totals.hd }}h</span></td>
-							<td class="num">{{ fmtMoney(totals.total_sold) }}</td>
+							<td class="num" :data-tip="__('Total commandé client (commandes client HT net) des chantiers affichés')"><span class="vtc-tot-lbl">{{ __('Commandé client') }}</span> {{ fmtMoney(totals.total_sold) }}</td>
 							<td class="num" :data-tip="__('Reste à facturer cumulé')"><span v-if="totals.reste">{{ __('reste') }} {{ fmtMoney(totals.reste) }}</span></td>
 							<td></td>
 							<td></td>
@@ -241,7 +253,7 @@
 							<th>{{ __('Flux (pér.)') }}</th>
 							<th>{{ __('Marge') }}</th>
 							<th>{{ __('Pointé (pér.)') }}</th>
-							<th class="num">{{ __('Total projet') }}</th>
+							<th class="num">{{ __('Commandé client') }}</th>
 							<th>{{ __('Facturation cumul') }}</th>
 							<th class="num">{{ __('Retard') }}</th>
 							<th>{{ __('Alertes') }}</th>
@@ -275,7 +287,6 @@ export default {
 	data() {
 		return {
 			search: "",
-			facetType: "",
 			facBilling: "", // "" | full | partial
 			// Filtres par type de flux (tous cochés par défaut).
 			fluxFilter: { pointe: true, facture: true, achat: true, depense: true, fab: true },
@@ -290,6 +301,8 @@ export default {
 			activeAlert: null,
 			cmOpen: false,
 			selectedCM: [...(this.store.filters.conducteurs || [])],
+			ptOpen: false,
+			selectedPT: [...(this.store.filters.project_types || [])],
 			// Infobulle flottante
 			tipShow: false, tipText: "", tipX: 0, tipY: 0,
 			sortKey: "flux",
@@ -327,10 +340,10 @@ export default {
 		kpiCards() {
 			const k = this.kpis, pv = this.prev;
 			return [
-				this.card("ca", __("CA facturé"), fmtCompact(k.ca_periode), __("factures validées"), k.ca_periode, pv.ca_periode, false,
-					__("Somme des factures de vente validées (hors acomptes et hors avoirs) rattachées à un chantier réel (heures estimées > 1), dont la date de facturation tombe dans la période.")),
+				this.card("ca", __("CA facturé"), fmtCompact(k.ca_periode), __("HT, avoirs déduits"), k.ca_periode, pv.ca_periode, false,
+					__("Montant HT net (après remises) des factures de vente validées rattachées à un chantier, datées dans la période. Avoirs déduits, factures d'acompte exclues. Même définition que le total 🧾 du tableau.")),
 				this.card("po", __("Commandé fournisseur"), fmtCompact(k.commande_fournisseur), __("commandes fournisseur"), k.commande_fournisseur, pv.commande_fournisseur, true,
-					__("Somme des montants des lignes de commandes fournisseur (non annulées) rattachées à un chantier, dont la commande est datée dans la période.")),
+					__("Somme des montants des lignes de commandes fournisseur (non annulées, brouillons inclus) rattachées à un chantier, dont la commande est datée dans la période.")),
 				this.card("depenses", __("Dépenses"), fmtCompact(k.depenses), __("notes de frais"), k.depenses, pv.depenses, true,
 					__("Somme des notes de frais (dépenses) rattachées à un chantier, dont la date de dépense tombe dans la période.")),
 				this.card("fabrication", __("Fabrication VT"), fmtCompact(k.fabrication), __("coût fabrication"), k.fabrication, pv.fabrication, true,
@@ -368,7 +381,10 @@ export default {
 		maxCM() { return Math.max(1, ...(this.data.conducteurs || []).map((c) => c.h_val + c.h_draft)); },
 
 		// --- Tableau ---
-		typeOptions() { return [...new Set(this.data.projects.map((p) => p.type_projet).filter(Boolean))].sort(); },
+		projectTypeLabel() {
+			const n = this.selectedPT.length;
+			return n === 0 ? __("Tous les types") : n === 1 ? this.selectedPT[0] : `${n} ${__("types de projet")}`;
+		},
 		conducteurLabel() {
 			const n = this.selectedCM.length;
 			return n === 0 ? __("Tous les conducteurs") : n === 1 ? this.cmName(this.selectedCM[0]) : `${n} ${__("conducteurs")}`;
@@ -395,7 +411,6 @@ export default {
 			let rows = this.data.projects.slice();
 			const q = this.search.trim().toLowerCase();
 			if (q) rows = rows.filter((p) => (p.project + " " + p.client + " " + p.conducteur_nom).toLowerCase().includes(q));
-			if (this.facetType) rows = rows.filter((p) => p.type_projet === this.facetType);
 			if (this.facBilling === "full") rows = rows.filter((p) => p.pct_facture >= 100);
 			else if (this.facBilling === "partial") rows = rows.filter((p) => p.pct_facture < 100);
 			// Filtre par type de flux (OU sur les types cochés). Si tout est coché,
@@ -503,7 +518,7 @@ export default {
 			this.store.filters[which + "_date"] = v;
 			this.store.reload();
 		},
-		// --- Filtres globaux (conducteurs / société → recalcul serveur) ---
+		// --- Filtres globaux (conducteurs / société / types → recalcul serveur) ---
 		cmName(value) {
 			const c = (this.data.meta.conducteurs || []).find((x) => x.value === value);
 			return c ? c.label : value;
@@ -517,16 +532,33 @@ export default {
 			this.cmOpen = false;
 			this.applyCM();
 		},
+		applyPT() {
+			this.store.filters.project_types = [...this.selectedPT];
+			this.store.reload();
+		},
+		clearPT() {
+			this.selectedPT = [];
+			this.ptOpen = false;
+			this.applyPT();
+		},
 		clearGlobal() {
 			this.selectedCM = [];
 			this.store.filters.conducteurs = [];
+			this.selectedPT = [];
+			this.store.filters.project_types = [];
 			this.store.filters.company = null;
 			this.store.filters.cost_center = null;
 			this.store.reload();
 		},
 		card(key, label, value, sub, cur, prev, invert, tip) {
 			let delta = null, deltaText = "", deltaClass = "";
-			if (prev != null && prev !== 0) {
+			let deltaTip = __("Variation vs période précédente de même durée");
+			if (prev != null && prev !== 0 && Math.abs((cur - prev) / prev) > 10) {
+				// Variation au-delà de ±1 000 % : la période précédente est
+				// négligeable, un % n'aurait aucun sens (ex. +121 511 %).
+				delta = 0; deltaText = __("n.s."); deltaClass = "flat ns";
+				deltaTip = __("Non significatif : la période précédente ({0}) est négligeable par rapport à la période courante, la variation dépasserait ±1 000 %.", [prev.toLocaleString("fr-FR")]);
+			} else if (prev != null && prev !== 0) {
 				const pct = Math.round(((cur - prev) / Math.abs(prev)) * 100);
 				delta = pct;
 				const up = pct > 0;
@@ -536,7 +568,7 @@ export default {
 			} else if (prev === 0 && cur > 0) {
 				delta = 100; deltaText = "▲ nouveau"; deltaClass = invert ? "bad" : "good";
 			}
-			return { key, label, value, sub, delta, deltaText, deltaClass, tone: "", tip };
+			return { key, label, value, sub, delta, deltaText, deltaClass, deltaTip, tone: "", tip };
 		},
 		toggleAlert(key) {
 			// Certaines alertes ouvrent directement une liste (les autres filtrent
@@ -692,6 +724,8 @@ export default {
 .vtc-delta.good { color: #1b7d3e; background: rgba(46,125,50,.14); }
 .vtc-delta.bad { color: #c62828; background: rgba(198,40,40,.14); }
 .vtc-delta.flat { color: var(--text-muted, #6c7680); background: var(--control-bg, #eef1f3); }
+.vtc-delta.ns { font-style: italic; }
+.vtc-tot-lbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted, #6c7680); margin-right: 4px; }
 
 /* Alertes */
 .vtc-alerts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }

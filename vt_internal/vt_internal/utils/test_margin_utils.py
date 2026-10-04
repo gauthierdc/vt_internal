@@ -19,6 +19,8 @@ compute_theoretical = _MOD.compute_theoretical
 get_theoretical = _MOD.get_theoretical
 get_theoretical_map = _MOD.get_theoretical_map
 calculate_margin = _MOD.calculate_margin
+get_real_cost_map = _MOD.get_real_cost_map
+get_project_costs = _MOD.get_project_costs
 
 # CC-2607-025-like: parent Menuiserie sells for 2300.73€, packed qty×rate ~7623€,
 # plus non-bundle lines 556.96€ → SO total 2857.69€. Old get_theoretical
@@ -186,6 +188,40 @@ class TestGetTheoreticalWiring(unittest.TestCase):
 		result = get_theoretical_map(["CC-2604-526-258055", "PRJ-OTHER"])
 		self.assertAlmostEqual(result["CC-2604-526-258055"][0], SO_TOTAL, places=2)
 		self.assertAlmostEqual(result["PRJ-OTHER"], (50.0, 10.0))
+
+
+class TestRealCostMap(unittest.TestCase):
+	def tearDown(self):
+		_MOD.frappe.db.sql.reset_mock()
+		_MOD.frappe.db.sql.side_effect = None
+
+	def _wire(self):
+		_MOD.frappe.db.sql.side_effect = [
+			[
+				{"name": "P1", "total_costing_amount": 100, "total_consumed_material_cost": 10, "total_expense_claim": 5},
+				{"name": "P2", "total_costing_amount": None, "total_consumed_material_cost": None, "total_expense_claim": None},
+			],
+			[("P1", 200), ("P2", 50)],
+			[("P1", 30)],
+		]
+
+	def test_batch_sums_the_five_real_cost_components(self):
+		self._wire()
+		result = get_real_cost_map(["P1", "P2", "UNKNOWN"])
+		self.assertEqual(_MOD.frappe.db.sql.call_count, 3)
+		self.assertAlmostEqual(result["P1"]["total_real_cost"], 100 + 200 + 10 + 5 + 30)
+		self.assertAlmostEqual(result["P2"]["total_real_cost"], 50)
+		self.assertEqual(result["UNKNOWN"]["total_real_cost"], 0)
+
+	def test_single_project_wrapper_matches_batch(self):
+		self._wire()
+		costs = get_project_costs("P1")
+		self.assertAlmostEqual(costs["total_purchase_order"], 200)
+		self.assertAlmostEqual(costs["total_manufacturing_cost"], 30)
+		self.assertAlmostEqual(costs["total_real_cost"], 345)
+
+	def test_empty(self):
+		self.assertEqual(get_real_cost_map([]), {})
 
 
 class TestCalculateMargin(unittest.TestCase):
