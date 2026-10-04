@@ -82,5 +82,50 @@ class TestCADefinition(unittest.TestCase):
 		self.assertEqual(_MOD.CA_AMOUNT, "si.net_total")
 
 
+class TestProjectFilters(unittest.TestCase):
+	"""Filtres projet (conducteurs / centre de coût / types de projet)."""
+
+	def test_project_types_clause_is_parameterised(self):
+		sql, params = _MOD._project_clause([], None, ["Chantier courant", "Dépannage"])
+		self.assertEqual(sql, " AND p.project_type IN (%s,%s)")
+		self.assertEqual(params, ["Chantier courant", "Dépannage"])
+
+	def test_all_filters_combined_in_order(self):
+		sql, params = _MOD._project_clause(["u@x"], "CC1", ["T1"])
+		self.assertEqual(
+			sql, " AND p.custom_construction_manager IN (%s) AND p.cost_center = %s AND p.project_type IN (%s)"
+		)
+		self.assertEqual(params, ["u@x", "CC1", "T1"])
+
+	def test_no_filter(self):
+		self.assertEqual(_MOD._project_clause([], None, []), ("", []))
+		self.assertFalse(_MOD._needs_project_join([], None, []))
+
+	def test_project_types_alone_forces_project_join(self):
+		self.assertTrue(_MOD._needs_project_join([], None, ["Enlèvement"]))
+
+	def test_parse_list_accepts_json_from_front(self):
+		self.assertEqual(_MOD._parse_list('["Chantier courant","Dépannage"]'), ["Chantier courant", "Dépannage"])
+		self.assertEqual(_MOD._parse_list(None), [])
+
+	def test_ca_query_with_project_type_filter(self):
+		# Même forme que la carte KPI : JOIN projet + définition unique du CA.
+		db = sqlite3.connect(":memory:")
+		db.execute(
+			"CREATE TABLE `tabSales Invoice` (name TEXT, project TEXT, docstatus INT,"
+			" is_return INT, is_down_payment_invoice INT, total REAL, net_total REAL)"
+		)
+		db.executemany("INSERT INTO `tabSales Invoice` VALUES (?, ?, ?, ?, ?, ?, ?)", INVOICES)
+		db.execute("CREATE TABLE `tabProject` (name TEXT, project_type TEXT)")
+		db.executemany("INSERT INTO `tabProject` VALUES (?, ?)", [("P1", "Chantier courant"), ("P2", "Enlèvement")])
+		sql, params = _MOD._project_clause([], None, ["Chantier courant"])
+		query = (
+			f"SELECT SUM({_MOD.CA_AMOUNT}) FROM `tabSales Invoice` si"
+			f" JOIN `tabProject` p ON p.name = si.project WHERE {_MOD.CA_WHERE}{sql}"
+		).replace("%s", "?")
+		self.assertAlmostEqual(db.execute(query, params).fetchone()[0], 800.0)
+		db.close()
+
+
 if __name__ == "__main__":
 	unittest.main()

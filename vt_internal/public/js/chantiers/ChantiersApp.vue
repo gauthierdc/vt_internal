@@ -66,7 +66,25 @@
 				@update:model-value="(v) => { store.filters.cost_center = v || null; store.reload(); }"
 			/>
 
-			<button v-if="selectedCM.length || store.filters.company || store.filters.cost_center" class="vtc-clearall" @click="clearGlobal">
+			<!-- Types de projet (multi-sélection, aucun coché = tous) -->
+			<div class="vtc-ms" v-if="data.meta.project_types && data.meta.project_types.length">
+				<button class="vtc-ms-btn" :class="{ on: selectedPT.length }" @click="ptOpen = !ptOpen"
+					:data-tip="__('Restreint tout le rapport (KPI, tableau, graphes, listes) aux chantiers des types cochés. Aucun coché = tous les types.')">
+					🏷️ {{ projectTypeLabel }} <span class="caret">▾</span>
+				</button>
+				<template v-if="ptOpen">
+					<div class="vtc-ms-backdrop" @click="ptOpen = false"></div>
+					<div class="vtc-ms-pop">
+						<label class="vtc-ms-opt all" @click="clearPT">{{ __('Tous les types') }}</label>
+						<label class="vtc-ms-opt" v-for="t in data.meta.project_types" :key="t.value">
+							<input type="checkbox" :value="t.value" v-model="selectedPT" @change="applyPT" />
+							{{ t.label }}
+						</label>
+					</div>
+				</template>
+			</div>
+
+			<button v-if="selectedCM.length || selectedPT.length || store.filters.company || store.filters.cost_center" class="vtc-clearall" @click="clearGlobal">
 				✕ {{ __('Réinitialiser') }}
 			</button>
 		</div>
@@ -157,12 +175,6 @@
 						@click="fluxFilter[ft.key] = !fluxFilter[ft.key]"
 					>{{ ft.icon }} {{ ft.label }}</button>
 				</div>
-				<DropSelect
-					icon="🏷️"
-					v-model="facetType"
-					:all-label="__('Tous les types')"
-					:options="typeOptions.map((t) => ({ value: t, label: t }))"
-				/>
 				<div class="vtc-seg" :data-tip="__('Avancement de facturation = facturé ÷ commandé.')">
 					<button :class="{ active: facBilling === '' }" @click="facBilling = ''">{{ __('Facturation') }}</button>
 					<button :class="{ active: facBilling === 'full' }" @click="facBilling = 'full'">{{ __('100 %') }}</button>
@@ -275,7 +287,6 @@ export default {
 	data() {
 		return {
 			search: "",
-			facetType: "",
 			facBilling: "", // "" | full | partial
 			// Filtres par type de flux (tous cochés par défaut).
 			fluxFilter: { pointe: true, facture: true, achat: true, depense: true, fab: true },
@@ -290,6 +301,8 @@ export default {
 			activeAlert: null,
 			cmOpen: false,
 			selectedCM: [...(this.store.filters.conducteurs || [])],
+			ptOpen: false,
+			selectedPT: [...(this.store.filters.project_types || [])],
 			// Infobulle flottante
 			tipShow: false, tipText: "", tipX: 0, tipY: 0,
 			sortKey: "flux",
@@ -368,7 +381,10 @@ export default {
 		maxCM() { return Math.max(1, ...(this.data.conducteurs || []).map((c) => c.h_val + c.h_draft)); },
 
 		// --- Tableau ---
-		typeOptions() { return [...new Set(this.data.projects.map((p) => p.type_projet).filter(Boolean))].sort(); },
+		projectTypeLabel() {
+			const n = this.selectedPT.length;
+			return n === 0 ? __("Tous les types") : n === 1 ? this.selectedPT[0] : `${n} ${__("types de projet")}`;
+		},
 		conducteurLabel() {
 			const n = this.selectedCM.length;
 			return n === 0 ? __("Tous les conducteurs") : n === 1 ? this.cmName(this.selectedCM[0]) : `${n} ${__("conducteurs")}`;
@@ -395,7 +411,6 @@ export default {
 			let rows = this.data.projects.slice();
 			const q = this.search.trim().toLowerCase();
 			if (q) rows = rows.filter((p) => (p.project + " " + p.client + " " + p.conducteur_nom).toLowerCase().includes(q));
-			if (this.facetType) rows = rows.filter((p) => p.type_projet === this.facetType);
 			if (this.facBilling === "full") rows = rows.filter((p) => p.pct_facture >= 100);
 			else if (this.facBilling === "partial") rows = rows.filter((p) => p.pct_facture < 100);
 			// Filtre par type de flux (OU sur les types cochés). Si tout est coché,
@@ -503,7 +518,7 @@ export default {
 			this.store.filters[which + "_date"] = v;
 			this.store.reload();
 		},
-		// --- Filtres globaux (conducteurs / société → recalcul serveur) ---
+		// --- Filtres globaux (conducteurs / société / types → recalcul serveur) ---
 		cmName(value) {
 			const c = (this.data.meta.conducteurs || []).find((x) => x.value === value);
 			return c ? c.label : value;
@@ -517,9 +532,20 @@ export default {
 			this.cmOpen = false;
 			this.applyCM();
 		},
+		applyPT() {
+			this.store.filters.project_types = [...this.selectedPT];
+			this.store.reload();
+		},
+		clearPT() {
+			this.selectedPT = [];
+			this.ptOpen = false;
+			this.applyPT();
+		},
 		clearGlobal() {
 			this.selectedCM = [];
 			this.store.filters.conducteurs = [];
+			this.selectedPT = [];
+			this.store.filters.project_types = [];
 			this.store.filters.company = null;
 			this.store.filters.cost_center = null;
 			this.store.reload();

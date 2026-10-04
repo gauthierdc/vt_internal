@@ -58,9 +58,9 @@ def _company_clause(company, alias="t"):
 	return "", []
 
 
-def _project_clause(cm_list, cost_center=None):
+def _project_clause(cm_list, cost_center=None, project_types=None):
 	"""(fragment_sql, params) pour filtrer sur des attributs du projet :
-	conducteurs de travaux et/ou centre de coût.
+	conducteurs de travaux, centre de coût et/ou types de projet.
 
 	Suppose qu'un alias `p` (tabProject) est disponible dans la requête (join
 	forcé par l'appelant via `_needs_project_join`)."""
@@ -72,27 +72,32 @@ def _project_clause(cm_list, cost_center=None):
 	if cost_center:
 		sql += " AND p.cost_center = %s"
 		params.append(cost_center)
+	if project_types:
+		ph = ",".join(["%s"] * len(project_types))
+		sql += f" AND p.project_type IN ({ph})"
+		params += list(project_types)
 	return sql, params
 
 
-def _needs_project_join(cm_list, cost_center=None):
-	"""Le filtre projet (conducteur / centre de coût) impose-t-il de joindre
-	`tabProject` dans les requêtes qui ne l'ont pas déjà ?"""
-	return bool(cm_list or cost_center)
+def _needs_project_join(cm_list, cost_center=None, project_types=None):
+	"""Le filtre projet (conducteur / centre de coût / type de projet)
+	impose-t-il de joindre `tabProject` dans les requêtes qui ne l'ont pas déjà ?"""
+	return bool(cm_list or cost_center or project_types)
 
 
-def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None):
+def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None, project_types=None):
 	"""KPIs scalaires pour une période — réutilisé pour la période courante ET
 	la période précédente (comparaison). Ne dépend pas de la boucle projets.
 
-	Si des conducteurs et/ou un centre de coût sont sélectionnés, on joint
+	Si des conducteurs, un centre de coût et/ou des types de projet sont
+	sélectionnés, on joint
 	systématiquement `tabProject` et on restreint aux chantiers concernés (les
 	heures hors chantier disparaissent alors naturellement du périmètre)."""
 
 	comp_t, comp_pt = _company_clause(company, "t")
 	comp_si, comp_psi = _company_clause(company, "si")
-	cm_sql, cm_p = _project_clause(cm_list, cost_center)
-	proj_join = _needs_project_join(cm_list, cost_center)
+	cm_sql, cm_p = _project_clause(cm_list, cost_center, project_types)
+	proj_join = _needs_project_join(cm_list, cost_center, project_types)
 	# Jointure projet nécessaire pour les requêtes timesheet qui ne l'ont pas.
 	cm_join = " JOIN `tabProject` p ON p.name = d.project" if proj_join else ""
 	excl = ",".join(["%s"] * len(EXCLUDED_ACTIVITIES))
@@ -267,31 +272,35 @@ def _scalar_kpis(start_date, end_date, company, cm_list, cost_center=None):
 
 
 @frappe.whitelist()
-def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None, cost_center=None):
+def get_chantiers(
+	start_date=None, end_date=None, company=None, conducteurs=None, cost_center=None, project_types=None
+):
 	"""Point d'entrée principal de la vue Chantiers.
 
 	Renvoie période, KPIs (+ comparaison période précédente), lignes projet
 	enrichies, chantiers sans pointage, répartitions (activité, conducteur) et
 	séries hebdomadaires. `conducteurs` = liste de User (multi-sélection).
-	`cost_center` = centre de coût (mono-sélection, porté par le projet)."""
+	`cost_center` = centre de coût (mono-sélection, porté par le projet).
+	`project_types` = liste de Project Type (multi-sélection, vide = tous)."""
 
 	end_date = end_date or frappe.utils.nowdate()
 	start_date = start_date or frappe.utils.add_to_date(end_date, days=-7)
 	cm_list = _parse_list(conducteurs)
 	cost_center = cost_center or None
+	project_types = _parse_list(project_types)
 
 	# Période précédente de même longueur, juste avant.
 	length = frappe.utils.date_diff(end_date, start_date)
 	prev_end = frappe.utils.add_to_date(start_date, days=-1)
 	prev_start = frappe.utils.add_to_date(prev_end, days=-length)
 
-	kpis = _scalar_kpis(start_date, end_date, company, cm_list, cost_center)
-	kpis_prev = _scalar_kpis(prev_start, prev_end, company, cm_list, cost_center)
+	kpis = _scalar_kpis(start_date, end_date, company, cm_list, cost_center, project_types)
+	kpis_prev = _scalar_kpis(prev_start, prev_end, company, cm_list, cost_center, project_types)
 
 	comp_t, comp_pt = _company_clause(company, "t")
 	comp_si, comp_psi = _company_clause(company, "si")
-	cm_sql, cm_p = _project_clause(cm_list, cost_center)
-	proj_join = _needs_project_join(cm_list, cost_center)
+	cm_sql, cm_p = _project_clause(cm_list, cost_center, project_types)
+	proj_join = _needs_project_join(cm_list, cost_center, project_types)
 	cm_join = " JOIN `tabProject` p ON p.name = d.project" if proj_join else ""
 	excl = ",".join(["%s"] * len(EXCLUDED_ACTIVITIES))
 
@@ -728,6 +737,17 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 
 	# Centres de coût réellement utilisés par des chantiers (Projets) — évite de
 	# proposer les centres de coût techniques/groupes jamais rattachés.
+	# Types de projet réellement utilisés par des chantiers (même logique).
+	meta_project_types = frappe.db.sql(
+		"""
+		SELECT DISTINCT p.project_type AS value, p.project_type AS label
+		FROM `tabProject` p
+		WHERE p.project_type IS NOT NULL AND p.project_type != ''
+		ORDER BY label
+		""",
+		as_dict=True,
+	)
+
 	meta_cost_centers = frappe.db.sql(
 		"""
 		SELECT DISTINCT p.cost_center AS value, p.cost_center AS label
@@ -802,7 +822,12 @@ def get_chantiers(start_date=None, end_date=None, company=None, conducteurs=None
 			"prev_end": str(prev_end),
 			"days": length + 1,
 		},
-		"meta": {"conducteurs": meta_conducteurs, "companies": meta_companies, "cost_centers": meta_cost_centers},
+		"meta": {
+			"conducteurs": meta_conducteurs,
+			"companies": meta_companies,
+			"cost_centers": meta_cost_centers,
+			"project_types": meta_project_types,
+		},
 		"doc_names": {
 			"ca": inv_names,
 			"po": po_names,
