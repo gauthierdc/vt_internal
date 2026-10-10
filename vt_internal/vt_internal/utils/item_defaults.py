@@ -11,6 +11,11 @@ Ordre de résolution (``get_default_supplier``) :
 Contrairement à ERPNext natif (``get_item_group_defaults`` ne lit que le
 groupe direct), on remonte l'arbre : une ligne sur « Verres » couvre tous les
 sous-groupes, une ligne sur un sous-groupe la surcharge.
+
+Configuration : uniquement dans l'UI (Groupe d'articles › Valeurs par défaut,
+Article › Valeurs par défaut). Utilisé par les règles verretransparence
+« (Sélection automatique du fournisseur interne) » et « Double vitrage »
+via ``frappe.call(...)`` (Dodock n'a pas de hook de globals sandbox).
 """
 
 import frappe
@@ -83,12 +88,3 @@ def get_default_supplier(item_code=None, company=None, item=None):
 		return None
 	return resolve_default_supplier(row, company, _defaults_supplier, _parent_group)
 
-
-def safe_exec_globals():
-	"""Hook ``safe_exec_globals`` (Frappe upstream ≥ v15).
-
-	NB : Dodock 5.17.8 n'appelle PAS ce hook (frappe/utils/safe_exec.py ne lit
-	aucun hook de globals) ; il est déclaré pour l'avenir. En prod, la
-	sous-règle passe par ``frappe.call(...)`` (fonction whitelistée).
-	"""
-	return {"vt_get_default_supplier": get_default_supplier}
