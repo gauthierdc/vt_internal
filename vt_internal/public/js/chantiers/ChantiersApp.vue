@@ -410,7 +410,7 @@ export default {
 		filtered() {
 			let rows = this.data.projects.slice();
 			const q = this.search.trim().toLowerCase();
-			if (q) rows = rows.filter((p) => (p.project + " " + p.client + " " + p.conducteur_nom).toLowerCase().includes(q));
+			if (q) rows = rows.filter((p) => (p.project + " " + p.client + " " + (p.client_id || "") + " " + p.conducteur_nom).toLowerCase().includes(q));
 			if (this.facBilling === "full") rows = rows.filter((p) => p.pct_facture >= 100);
 			else if (this.facBilling === "partial") rows = rows.filter((p) => p.pct_facture < 100);
 			// Filtre par type de flux (OU sur les types cochés). Si tout est coché,
@@ -442,7 +442,7 @@ export default {
 			const list = (this.data && this.data.sans_pointage) || [];
 			const q = this.search.trim().toLowerCase();
 			if (!q) return list;
-			return list.filter((p) => (p.project + " " + p.client + " " + (p.conducteur_nom || "")).toLowerCase().includes(q));
+			return list.filter((p) => (p.project + " " + p.client + " " + (p.client_id || "") + " " + (p.conducteur_nom || "")).toLowerCase().includes(q));
 		},
 		totals() {
 			const r = this.filtered;
