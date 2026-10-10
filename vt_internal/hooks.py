@@ -120,6 +120,10 @@ doctype_calendar_js = {"Event": "public/js/event_calendar.js"}
 # Jinja
 # ----------
 
+# Globals exposés aux scripts sandbox (Frappe upstream ≥ v15).
+# NB : non lu par Dodock 5.17.8 → en prod passer par frappe.call(...) (cf. utils/item_defaults.py).
+safe_exec_globals = ["vt_internal.vt_internal.utils.item_defaults.safe_exec_globals"]
+
 # add methods and filters to jinja environment
 # jinja = {
 # 	"methods": "vt_internal.utils.jinja_methods",
