@@ -11,10 +11,10 @@ migrate. Usage :
 	# liste d'exclusion personnalisée :
 	... --kwargs "{'dry_run': 0, 'excluded': ['Menuiserie', 'Miroir']}"
 
-Règle maison : un correctif de masse ne doit JAMAIS changer ``modified``.
-→ insertion des lignes enfant via ``Document.db_insert()`` (pas de save du
-parent, pas de hook, ``modified`` du Item Group intact) et mise à jour via
-``frappe.db.set_value(..., update_modified=False)``.
+Écriture via l'API document standard : ``frappe.get_doc`` → ajout/mise à
+jour des lignes (clé = société) → ``doc.save()`` (permissions, validations,
+historique Version ; ``modified`` est mis à jour, accepté par Gauthier pour ce
+changement de config). Aucun save si rien ne change.
 
 Pourquoi copier dans les sous-groupes : le natif ERPNext
 (``get_item_group_defaults``) ne lit que le groupe DIRECT de l'article pour
@@ -107,44 +107,29 @@ def plan(include_subgroups=True, excluded=None):
 	return target
 
 
-def _upsert(parenttype, parentfield, parent, company, supplier, dry_run, report):
-	"""Pose Item Default.default_supplier sans jamais toucher ``modified``."""
-	existing = frappe.db.get_value(
-		"Item Default",
-		{"parenttype": parenttype, "parentfield": parentfield, "parent": parent, "company": company},
-		["name", "default_supplier"],
-		as_dict=True,
-	)
-	key = (parenttype, parent, company)
-	if existing and existing.default_supplier == supplier:
-		report["ok"].append((*key, supplier))
-		return
-	if existing:
-		report["update"].append((*key, existing.default_supplier, supplier))
-		if not dry_run:
-			frappe.db.set_value("Item Default", existing.name, "default_supplier", supplier, update_modified=False)
-		return
-	report["insert"].append((*key, supplier))
-	if dry_run:
-		return
-	idx = (
-		frappe.db.sql(
-			"select max(idx) from `tabItem Default` where parenttype=%s and parent=%s",
-			(parenttype, parent),
-		)[0][0]
-		or 0
-	)
-	frappe.get_doc(
-		{
-			"doctype": "Item Default",
-			"parenttype": parenttype,
-			"parentfield": parentfield,
-			"parent": parent,
-			"idx": idx + 1,
-			"company": company,
-			"default_supplier": supplier,
-		}
-	).db_insert()  # n'altère pas le modified du parent
+def _apply(doctype, name, tablefield, rows, dry_run, report):
+	"""Pose default_supplier par société sur un document (API standard).
+
+	rows : {company: supplier}. Sauvegarde uniquement si quelque chose change
+	(save() normal : permissions, validations, historique Version, ``modified``).
+	"""
+	doc = frappe.get_doc(doctype, name)
+	changed = False
+	for company, supplier in sorted(rows.items()):
+		row = next((r for r in doc.get(tablefield) or [] if r.company == company), None)
+		key = (doctype, name, company)
+		if row and row.default_supplier == supplier:
+			report["ok"].append((*key, supplier))
+			continue
+		if row:
+			report["update"].append((*key, row.default_supplier, supplier))
+			row.default_supplier = supplier
+		else:
+			report["insert"].append((*key, supplier))
+			doc.append(tablefield, {"company": company, "default_supplier": supplier})
+		changed = True
+	if changed and not dry_run:
+		doc.save()
 
 
 def run(dry_run=1, include_subgroups=1, excluded=None, with_items=1):
@@ -163,16 +148,20 @@ def run(dry_run=1, include_subgroups=1, excluded=None, with_items=1):
 			frappe.throw(f"Fournisseur désactivé : {n}")
 
 	report = {"insert": [], "update": [], "ok": []}
-	for (group, company), supplier in sorted(plan(include_subgroups, excluded).items()):
-		_upsert("Item Group", "item_group_defaults", group, company, supplier, dry_run, report)
+	by_group = {}
+	for (group, company), supplier in plan(include_subgroups, excluded).items():
+		by_group.setdefault(group, {})[company] = supplier
+	for group in sorted(by_group):
+		_apply("Item Group", group, "item_group_defaults", by_group[group], dry_run, report)
 	if int(with_items):
-		for (item, company), supplier in sorted(ITEM_DEFAULTS.items()):
-			_upsert("Item", "item_defaults", item, company, supplier, dry_run, report)
+		by_item = {}
+		for (item, company), supplier in ITEM_DEFAULTS.items():
+			by_item.setdefault(item, {})[company] = supplier
+		for item in sorted(by_item):
+			_apply("Item", item, "item_defaults", by_item[item], dry_run, report)
 
 	if not dry_run:
 		frappe.db.commit()
-		frappe.clear_cache(doctype="Item Group")
-		frappe.clear_cache(doctype="Item")
 	print(
 		f"{'[DRY RUN] ' if dry_run else ''}insert={len(report['insert'])} "
 		f"update={len(report['update'])} déjà_ok={len(report['ok'])}"
