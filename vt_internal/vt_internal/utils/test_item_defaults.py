@@ -22,6 +22,8 @@ TREE = {
 	"Verres trempés AA": "Verres trempés",
 	"Verres trempés BP": "Verres trempés",
 	"Verres trempés": "Verres trempés - feuilletés trempés",
+	"Verres feuilletés trempés": "Verres trempés - feuilletés trempés",
+	"Dalles de sol": "Verres trempés - feuilletés trempés",
 	"Verres trempés - feuilletés trempés": "Verres",
 	"Verres float": "Verres monolithiques",
 	"Verres imprimés": "Verres monolithiques",
@@ -44,6 +46,10 @@ ROWS = {
 	("Item Group", "Verres imprimés", MAV): "INTERNE MAV",
 	("Item Group", "Verres imprimés", VS): "INTERNE",
 	("Item Group", "Verres trempés BP", VS): "08BMV000",  # existe déjà en prod
+	("Item Group", "Verres feuilletés trempés", MAV): "08ALPVER",
+	("Item Group", "Verres feuilletés trempés", VS): "CONTROL GLASS",
+	("Item Group", "Dalles de sol", VS): "08PYROVE",
+	("Item", "COUPE FEU 30-186", VS): "08PYROVE",
 	("Item", "5R-X-4", MAV): "MIDI MIROITERIE",
 	("Item", "5R-X-4", VS): "VIA",
 	("Item", "1506DARKBP", VS): "08BMV000",
@@ -78,6 +84,17 @@ class TestDefaultSupplier(unittest.TestCase):
 		for code, group in (("LA0337", "Laqué"), ("1006MIRA", "Miroir"), ("MENU", "Menuiserie")):
 			for company in (MAV, VS):
 				self.assertIsNone(r(code, group, company), (code, company))
+
+	def test_overrides(self):
+		self.assertEqual(r("151010/2BP", "Verres feuilletés trempés", MAV), "08ALPVER")
+		self.assertEqual(r("151010/2BP", "Verres feuilletés trempés", VS), "CONTROL GLASS")
+		self.assertEqual(r("1510106/4", "Dalles de sol", MAV), "08BMV000")
+		self.assertEqual(r("1510106/4", "Dalles de sol", VS), "08PYROVE")
+
+	def test_coupe_feu(self):
+		self.assertEqual(r("COUPE FEU 30-186", "Verres", VS), "08PYROVE")
+		self.assertIsNone(r("COUPE FEU 30-186", "Verres", MAV))
+		self.assertIsNone(r("COUPE FEU 60-181 extra clair", "Verres", VS))
 
 	def test_no_company(self):
 		self.assertIsNone(r("FLOAT", "Verres float", None))
