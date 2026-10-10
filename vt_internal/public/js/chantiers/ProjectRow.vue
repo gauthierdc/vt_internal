@@ -4,7 +4,7 @@
 			<a href="#" @click.prevent="$emit('open', p.project)">{{ p.project }}</a>
 			<span v-if="p.type_projet" class="vtc-type">{{ p.type_projet }}</span>
 		</td>
-		<td class="vtc-client">{{ p.client }}</td>
+		<td class="vtc-client" :title="p.client_id">{{ p.client }}</td>
 		<td class="vtc-flux">
 			<a v-if="p.ca_periode" href="#" class="flux-chip fin" :data-tip="__('Facturé (ventes)') + ' : ' + fmtMoney(p.ca_periode) + ' — ' + __('voir les factures de la période')" @click.prevent="$emit('docs', { project: p.project, kind: 'invoices' })">🧾 {{ fmtCompact(p.ca_periode) }}</a>
 			<a v-if="p.po_periode" href="#" class="flux-chip po" :data-tip="__('Achats — commandes fournisseur') + ' : ' + fmtMoney(p.po_periode) + ' — ' + __('voir les commandes')" @click.prevent="$emit('docs', { project: p.project, kind: 'po' })">🛒 {{ fmtCompact(p.po_periode) }}</a>

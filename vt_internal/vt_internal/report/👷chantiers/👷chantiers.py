@@ -266,7 +266,7 @@ def execute(filters: dict | None = None):
 		heures_combined = f"{hours_total_project}|{hours_expected}|{hours_diff_int}"
 
 		mydata.append({
-			"client": p.customer or '',
+			"client": (frappe.get_cached_value("Customer", p.customer, "customer_name") if p.customer else None) or p.customer or '',
 			"projet": project_link,
 			"ca_ht": ca,
 			"marge": marge_combined,

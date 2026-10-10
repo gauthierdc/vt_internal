@@ -495,9 +495,12 @@ def get_chantiers(
 		# Métadonnées projet (remplace un get_value par projet)
 		for r in frappe.db.sql(
 			f"""
-			SELECT name, status, project_type, expected_end_date, customer,
-			       total_sales_amount, custom_construction_manager, custom_project_manager
-			FROM `tabProject` WHERE name IN ({ph})
+			SELECT p.name, p.status, p.project_type, p.expected_end_date, p.customer,
+			       c.customer_name, p.total_sales_amount,
+			       p.custom_construction_manager, p.custom_project_manager
+			FROM `tabProject` p
+			LEFT JOIN `tabCustomer` c ON c.name = p.customer
+			WHERE p.name IN ({ph})
 			""",
 			tuple(project_names), as_dict=True,
 		):
@@ -585,7 +588,9 @@ def get_chantiers(
 
 		rows_by_name[name] = {
 			"project": name,
-			"client": p.customer or "",
+			# Nom commercial (customer_name), repli sur l'ID (code comptable).
+			"client": p.customer_name or p.customer or "",
+			"client_id": p.customer or "",
 			"status": p.status,
 			"is_facture": is_facture,
 			"is_sav": is_facture and (h_val + h_draft) > 0,
