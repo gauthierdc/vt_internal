@@ -26,6 +26,9 @@ TREE = {
 	"Verres float": "Verres monolithiques",
 	"Verres imprimés": "Verres monolithiques",
 	"Verres monolithiques": "Verres",
+	"Laqué": "Verres monolithiques",
+	"Miroir": "Verres monolithiques",
+	"Menuiserie": "Verres",
 	"Verres": "Miroiterie",
 	"Double vitrage standard": "Double vitrage compositions",
 	"Double vitrage compositions": "Double vitrage",
@@ -35,8 +38,11 @@ TREE = {
 ROWS = {
 	("Item Group", "Verres trempés - feuilletés trempés", MAV): "08BMV000",
 	("Item Group", "Verres trempés - feuilletés trempés", VS): "08BMV000",
-	("Item Group", "Verres", MAV): "INTERNE MAV",
-	("Item Group", "Verres", VS): "INTERNE",
+	# pas de ligne sur « Verres » : seulement les vrais sous-groupes verre
+	("Item Group", "Verres float", MAV): "INTERNE MAV",
+	("Item Group", "Verres float", VS): "INTERNE",
+	("Item Group", "Verres imprimés", MAV): "INTERNE MAV",
+	("Item Group", "Verres imprimés", VS): "INTERNE",
 	("Item Group", "Verres trempés BP", VS): "08BMV000",  # existe déjà en prod
 	("Item", "5R-X-4", MAV): "MIDI MIROITERIE",
 	("Item", "5R-X-4", VS): "VIA",
@@ -67,6 +73,11 @@ class TestDefaultSupplier(unittest.TestCase):
 		self.assertEqual(r("5R-X-4", "Double vitrage standard", VS), "VIA")
 		self.assertEqual(r("1506DARKBP", "Verres trempés BP", VS), "08BMV000")
 		self.assertEqual(r("1506DARKBP", "Verres trempés BP", MAV), "08BMV000")
+
+	def test_excluded_groups_empty(self):
+		for code, group in (("LA0337", "Laqué"), ("1006MIRA", "Miroir"), ("MENU", "Menuiserie")):
+			for company in (MAV, VS):
+				self.assertIsNone(r(code, group, company), (code, company))
 
 	def test_no_company(self):
 		self.assertIsNone(r("FLOAT", "Verres float", None))
