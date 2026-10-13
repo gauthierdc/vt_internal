@@ -7,6 +7,21 @@ Source de vérité : ce fichier (versionné). Les records DB ont été supprimé
 import frappe
 
 
+def _set_custom_labour_hours(doc):
+    # Somme qty × heures des articles pose VT (lignes et composants de bundle).
+    # Arrondi à 2 décimales : les quantités portent un bruit flottant
+    # (ex. 33.944444434) qui sinon reste stocké dans custom_labour_hours
+    # et écrase toute correction manuelle à l'enregistrement.
+    num_of_hours = 0
+    for i in doc.items:
+        if frappe.db.get_value("Item", i.item_code, "custom_pose_vt"):
+            num_of_hours = num_of_hours + i.qty*frappe.db.get_value("Item", i.item_code, "custom_number_of_labor_hours")
+    for i in doc.packed_items:
+        if frappe.db.get_value("Item", i.item_code, "custom_pose_vt"):
+            num_of_hours = num_of_hours + i.qty*frappe.db.get_value("Item", i.item_code, "custom_number_of_labor_hours")
+    doc.custom_labour_hours = round(num_of_hours, 2)
+
+
 def before_validate(doc, method=None):
     # --- depuis Server Script « Ignore pricing rule » (Before Validate) ---
     doc.flags.ignore_pricing_rule = True
@@ -26,15 +41,7 @@ def validate(doc, method=None):
     doc.custom_remaining_amount = doc.grand_total - doc.advance_paid
     doc.total_qty = sum([i.qty if i.row_print_style != "Hide Row" and i.row_type == ""  else 0 for i in doc.items])
 
-    num_of_hours = 0
-    for i in doc.items:
-        if frappe.db.get_value("Item", i.item_code, "custom_pose_vt"):
-            num_of_hours = num_of_hours + i.qty*frappe.db.get_value("Item", i.item_code, "custom_number_of_labor_hours")
-    for i in doc.packed_items:
-        if frappe.db.get_value("Item", i.item_code, "custom_pose_vt"):
-            num_of_hours = num_of_hours + i.qty*frappe.db.get_value("Item", i.item_code, "custom_number_of_labor_hours")
-    doc.custom_labour_hours = num_of_hours
-
+    _set_custom_labour_hours(doc)
 
     for item in doc.items:
         if not item.project:
@@ -119,14 +126,7 @@ def before_update_after_submit(doc, method=None):
 
     doc.flags.ignore_pricing_rule = True
 
-    num_of_hours = 0
-    for i in doc.items:
-        if frappe.db.get_value("Item", i.item_code, "custom_pose_vt"):
-            num_of_hours = num_of_hours + i.qty*frappe.db.get_value("Item", i.item_code, "custom_number_of_labor_hours")
-    for i in doc.packed_items:
-        if frappe.db.get_value("Item", i.item_code, "custom_pose_vt"):
-            num_of_hours = num_of_hours + i.qty*frappe.db.get_value("Item", i.item_code, "custom_number_of_labor_hours")
-    doc.custom_labour_hours = num_of_hours
+    _set_custom_labour_hours(doc)
 
     if doc.project:
         for i in doc.items:
