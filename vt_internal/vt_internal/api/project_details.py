@@ -3,6 +3,18 @@ from frappe import _
 
 from vt_internal.vt_internal.utils.margin_utils import get_theoretical, get_project_costs, calculate_margin
 
+
+def round_labour_hours_and_diff(sales_orders, time_spent):
+    """Heures théoriques et écart réel - théorique, arrondis à 2 décimales.
+
+    Même précision que le temps réel (déjà arrondi dans `get_timesheets`).
+    La somme des `custom_labour_hours` reprend le bruit flottant des quantités
+    tant que les commandes n'ont pas été ré-enregistrées.
+    """
+    labour_hours = round(sum(i.custom_labour_hours or 0 for i in sales_orders) or 0, 2)
+    return labour_hours, round(time_spent - labour_hours, 2)
+
+
 @frappe.whitelist(allow_guest=True)
 def project_details():
 
@@ -276,7 +288,7 @@ def project_details():
     per_down_payment_unpaid = round(sum((s.outstanding_amount if s.is_down_payment_invoice else 0 for s in sales_invoices_payments)) / grand_total_sold_ttc * 100)
     per_billed_paid = round(sum((s.grand_total - s.outstanding_amount) if not s.is_down_payment_invoice else 0 for s in sales_invoices_payments)/grand_total_sold_ttc*100)
     per_billed_unpaid = round(sum([s.outstanding_amount if not s.is_down_payment_invoice else 0 for s in sales_invoices_payments])/grand_total_sold_ttc*100)
-    labour_hours = sum(i.custom_labour_hours or 0 for i in sales_orders) or 0
+    labour_hours, diff_time = round_labour_hours_and_diff(sales_orders, time_spent)
     items = sorted(items, key=lambda k: frappe.utils.getdate(k['date']) if k['date'] else frappe.utils.getdate('1900-01-01'))
     total_purchases = total_purchase_order + project.total_expense_claim
     total_expenses = total_purchases + project.total_costing_amount + total_manufacturing_cost
@@ -289,7 +301,6 @@ def project_details():
     time_spent_color = "success" if time_spent <= labour_hours else "warning" if time_spent < labour_hours * 1.1 else "danger"
     diff_global = real_margin - theoretical_margin
     diff_ach = real_margin_ach - theo_margin_ach
-    diff_time = time_spent - labour_hours
     has_pose_vt = labour_hours > 0 or time_spent > 0
     marges_table = f"""
         <table class="table mb-0">
