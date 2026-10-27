@@ -75,9 +75,11 @@ def before_save(doc, method=None):
     # Génération du lien BPA
     mobile = doc.contact_mobile or ""
     email = doc.contact_email or ""
+    company_phone = frappe.db.get_value("Company", doc.company, "phone_no") or ""
     doc.custom_quotation_approval_link = (
         f"https://bureau.verretransparence.fr/bon-pour-accord-devis/new?"
         f"quotation={doc.name}&contact_mobile={mobile}&contact_email={email}"
+        + (f"&company_phone={frappe.utils.quote(company_phone)}" if company_phone else "")
     )
 
 def before_print(doc, method=None, print_settings=None, *args, **kwargs):
