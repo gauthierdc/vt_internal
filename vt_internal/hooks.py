@@ -369,6 +369,14 @@ scheduler_events = {
 					"vt_internal.vt_internal.tasks.rappel_intervention.rappel_chantier",
 					"vt_internal.vt_internal.tasks.rappel_intervention.rappel_visite_technique",
 			],
+			# Jeudi 18h30 (timezone du site, Europe/Paris) — Devis relances VS
+			"30 18 * * 4": [
+					"vt_internal.vt_internal.tasks.devis_relances.send_vs",
+			],
+			# Vendredi 18h00 (timezone du site, Europe/Paris) — Devis relances Riviera
+			"0 18 * * 5": [
+					"vt_internal.vt_internal.tasks.devis_relances.send_riviera",
+			],
 	},
 }
 
