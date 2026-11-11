@@ -95,7 +95,9 @@ frappe.ui.form.on('Sales Order', {
                     .then(doc => {
                         frm.set_value("custom_type_de_projet", doc.custom_type_de_projet)
                         frm.set_value("secteur_vt", doc.secteur_vt)
-                        doc.items.forEach(t => frm.add_child('items', t))
+                        doc.items.forEach(t => {
+                            frappe.vt.copyChildRowData(frm.add_child('items'), t);
+                        })
                     frm.refresh_field('items');
                     frm.refresh()
                     })

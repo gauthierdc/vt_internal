@@ -7,15 +7,21 @@
 //
 // Ces modules remplacent le code dupliqué qui vivait dans visite_technique.js
 // et fiche_de_travail.js.
+//
+// vt.copyChildRowData copie une ligne de tableau enfant sans son identité
+// (name, doctype, parent), pour que les set_value suivants ne retombent pas
+// sur le document d'origine.
 
 import "./vt/timer";
 import "./vt/photos";
 import "./vt/timer_widget";
+import { copyChildRowData } from "./copy_child_row.js";
 import { attachCalendarEmployeeHelpers } from "./event_calendar_employees.js";
 import { attachDeskMobileScrollHelpers, installDeskMobileScrollGuard } from "./vt_desk_mobile_scroll.js";
 
 if (typeof frappe !== "undefined") {
 	frappe.provide("frappe.vt");
+	frappe.vt.copyChildRowData = copyChildRowData;
 	attachCalendarEmployeeHelpers(frappe.vt);
 	attachDeskMobileScrollHelpers(frappe.vt);
 
