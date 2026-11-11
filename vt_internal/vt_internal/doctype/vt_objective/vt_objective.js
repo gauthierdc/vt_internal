@@ -15,7 +15,8 @@ frappe.ui.form.on('VT Objective', {
             
             while (frm.doc.details.length < 52) {
                 let new_row = frm.add_child('details');
-                Object.assign(new_row, last_row);
+                // Do not copy name: every new week must stay its own row in `locals`.
+                frappe.vt.copyChildRowData(new_row, last_row);
                 new_row.idx = frm.doc.details.length; // Réassigner un numéro unique de ligne
                 new_row.week = frm.doc.details.length; // Réassigner un numéro unique de ligne
             }

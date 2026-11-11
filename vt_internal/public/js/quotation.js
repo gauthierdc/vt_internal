@@ -71,7 +71,10 @@ function addSupplierQuotationButton(frm) {
                 frm.doc.items.forEach(i => {
                     if (i.row_type === '') {
                         let sup_item = frappe.model.add_child(sup, 'items');
-                        Object.assign(sup_item, i);
+                        // Keep the new row's name/doctype. Those fields are its
+                        // identity in `locals`; copying them makes the buying
+                        // price update overwrite this customer quotation.
+                        frappe.vt.copyChildRowData(sup_item, i);
                     }
                 });
             });
@@ -92,7 +95,9 @@ function addModelFromQuotationButton(frm) {
             frappe.db.get_doc('Quotation', values.devis).then(doc => {
                 frm.set_value('custom_type_de_projet', doc.custom_type_de_projet);
                 frm.set_value('secteur_vt', doc.secteur_vt);
-                doc.items.forEach(t => frm.add_child('items', t));
+                doc.items.forEach(t => {
+                    frappe.vt.copyChildRowData(frm.add_child('items'), t);
+                });
                 frm.refresh_field('items');
                 frm.refresh();
             });
