@@ -142,7 +142,9 @@ curl -s -G "https://bureau.verretransparence.fr/api/method/vt_internal.vt_intern
 Correspondance :
 
 1. Adresse exacte (insensible à la casse) sur le contact, le client, le fournisseur, la piste et l'adresse.
-2. Sinon, domaine de l'adresse (`match_type: "domain"`), sauf webmail et FAI grand public (`gmail.com`, `hotmail.fr`, `orange.fr`, `free.fr`, `wanadoo.fr`, `yahoo.*`, `outlook.*`, `icloud.com`, `laposte.net`, `sfr.fr`, et les alias `googlemail.com`, `live.*`, `me.com`).
+2. Sinon, domaine de l'adresse (`match_type: "domain"`), sauf webmail et FAI grand public (`gmail.com`, `orange.fr`, `free.fr`, `neuf.fr`, `bbox.fr`, `aol.com`, `yahoo.*`, `outlook.*`, `hotmail.*`, `live.*`… liste complète : `GENERIC_EMAIL_DOMAINS` dans `gmail.py`) et sauf les domaines des utilisateurs système ERPNext (nos sociétés).
+
+L'adresse d'un utilisateur système (un collègue) ne renvoie rien : `internal: true`, le panneau affiche « Adresse interne ». Même chose pour une adresse inconnue sur le domaine d'un utilisateur. Une correspondance exacte sur ce domaine (ex. une boîte partagée enregistrée comme contact client) reste affichée.
 
 Une même adresse peut renvoyer un client et un fournisseur. Les deux sont typés (`doctype`).
 

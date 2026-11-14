@@ -34,6 +34,29 @@ GENERIC_EMAIL_DOMAINS = frozenset(
 		"mac.com",
 		"laposte.net",
 		"sfr.fr",
+		"neuf.fr",
+		"bbox.fr",
+		"numericable.fr",
+		"noos.fr",
+		"club-internet.fr",
+		"aliceadsl.fr",
+		"cegetel.net",
+		"voila.fr",
+		"tiscali.fr",
+		"nordnet.fr",
+		"9online.fr",
+		"aol.com",
+		"aol.fr",
+		"msn.com",
+		"ymail.com",
+		"gmx.fr",
+		"gmx.com",
+		"gmx.de",
+		"gmx.net",
+		"proton.me",
+		"protonmail.com",
+		"mail.com",
+		"yandex.com",
 	}
 )
 GENERIC_EMAIL_DOMAIN_PREFIXES = ("yahoo.", "outlook.", "hotmail.", "live.")
@@ -103,13 +126,16 @@ def lookup_by_email(email=None):
 
 	Correspondance, dans l'ordre :
 
+	0. L'adresse d'un utilisateur système (collègue) ne renvoie rien,
+	   avec ``internal`` à ``true``.
 	1. Exacte, insensible à la casse (collation ``*_ci`` du site) sur
 	   Contact Email, ``Contact.email_id``, ``Customer.email_id``,
 	   ``Supplier.email_id``, ``Lead.email_id`` et ``Address.email_id``.
 	   Les liens dynamiques rattachent le contact ou l'adresse au client,
 	   au fournisseur ou à la piste.
 	2. Sinon, et seulement si le domaine n'est pas un webmail / FAI listé
-	   dans ``GENERIC_EMAIL_DOMAINS``, repli sur le domaine exact
+	   dans ``GENERIC_EMAIL_DOMAINS`` ni le domaine d'un utilisateur
+	   système (nos sociétés, ``internal`` à ``true``), repli sur le domaine exact
 	   (``match_type`` = ``"domain"``). ``user@notexemple.fr`` ne correspond
 	   pas à ``exemple.fr``.
 
@@ -134,6 +160,7 @@ def lookup_by_email(email=None):
 	        "normalized_email": "jean.dupont@exemple.fr",
 	        "domain": "exemple.fr",
 	        "generic_domain": false,
+	        "internal": false,
 	        "match_type": "exact",
 	        "truncated": false,
 	        "customers": [
@@ -233,11 +260,19 @@ def lookup_by_email(email=None):
 
 	domain = email_domain(normalized)
 	generic = is_generic_domain(domain)
+	user_emails = _user_emails()
+	# Un collègue n'est ni client ni fournisseur.
+	if normalized in user_emails:
+		return empty_result(raw, normalized, domain, generic, internal=True)
 	exact = _search(normalized, "exact")
 	if _has_hit(exact):
 		return _build(raw, normalized, domain, generic, "exact", exact)
 	if not domain or generic:
 		return empty_result(raw, normalized, domain, generic)
+	# Domaine d'un utilisateur (nos sociétés) : le repli listerait des
+	# fiches au hasard.
+	if domain in {email_domain(email) for email in user_emails}:
+		return empty_result(raw, normalized, domain, generic, internal=True)
 
 	by_domain = _search(domain, "domain")
 	if not _has_hit(by_domain):
@@ -290,8 +325,20 @@ def is_generic_domain(domain):
 	return any(domain.startswith(prefix) for prefix in GENERIC_EMAIL_DOMAIN_PREFIXES)
 
 
-def empty_result(raw, normalized="", domain="", generic=False):
-	return _envelope(raw, normalized, domain, generic, None, False, [], [], [], [])
+def empty_result(raw, normalized="", domain="", generic=False, internal=False):
+	result = _envelope(raw, normalized, domain, generic, None, False, [], [], [], [])
+	result["internal"] = bool(internal)
+	return result
+
+
+def _user_emails():
+	"""Adresses des utilisateurs système, actifs ou non, en minuscules.
+
+	Leurs domaines sont ceux de nos sociétés : pas de repli par domaine
+	dessus. Les domaines webmail sont déjà exclus par ailleurs.
+	"""
+	emails = frappe.get_all("User", filters={"user_type": "System User"}, pluck="email")
+	return {normalize_email(email) for email in emails if normalize_email(email)}
 
 
 def _raw_email(email):
@@ -308,6 +355,7 @@ def _envelope(raw, normalized, domain, generic, match_type, truncated, customers
 		"normalized_email": normalized or None,
 		"domain": domain or None,
 		"generic_domain": bool(generic),
+		"internal": False,
 		"match_type": match_type,
 		"truncated": bool(truncated),
 		"customers": customers,

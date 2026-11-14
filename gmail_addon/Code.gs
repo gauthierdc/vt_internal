@@ -186,6 +186,13 @@ function renderCard_(base, email, data) {
     });
   var nothing = !customers.length && !suppliers.length && !leads.length && !unlinked.length;
 
+  if (data.internal) {
+    pushSection_(card, budget, null, [
+      CardService.newTextParagraph().setText('Adresse interne (utilisateur ERPNext ou domaine de nos sociétés) : pas de fiche client ou fournisseur.')
+    ]);
+    return card.build();
+  }
+
   if (nothing) {
     pushSection_(card, budget, null, emptyWidgets_(base, data, email));
     return card.build();

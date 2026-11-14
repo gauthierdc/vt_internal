@@ -55,6 +55,7 @@ class FakeFrappe:
 		self.tables = {doctype: [] for doctype in DOCTYPES}
 		self.calls = []
 		self.raise_permission = set()
+		self.users = []
 		self.utils = self
 		self.PermissionError = PermissionError
 
@@ -79,6 +80,10 @@ class FakeFrappe:
 		if uri:
 			return SITE + uri
 		return SITE
+
+	def get_all(self, doctype, filters=None, pluck=None, **kwargs):
+		assert doctype == "User" and filters == {"user_type": "System User"} and pluck == "email"
+		return list(self.users)
 
 	def get_url_to_form(self, doctype, name):
 		slug = SLUGS[doctype]
@@ -387,6 +392,11 @@ class TestGmailLookup(unittest.TestCase):
 			"sfr.fr",
 			"wanadoo.fr",
 			"free.fr",
+			"neuf.fr",
+			"bbox.fr",
+			"aol.com",
+			"msn.com",
+			"proton.me",
 		):
 			self.assertTrue(mod.is_generic_domain(domain), domain)
 		self.assertFalse(mod.is_generic_domain("exemple.fr"))
@@ -970,3 +980,43 @@ class TestGmailLookup(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestGmailInternal(unittest.TestCase):
+	def setUp(self):
+		self.fake = FakeFrappe()
+		self.fake.users = ["Paul@VerreTransparence.fr", "admin@gmail.com", None]
+		self.mod = _load(self.fake)
+		self.fake.tables["Customer"] = [
+			_customer(name="CUST-I", customer_name="Interne", email_id="chantier@verretransparence.fr"),
+		]
+
+	def test_user_email_returns_nothing(self):
+		self.fake.tables["Customer"].append(
+			_customer(name="CUST-P", customer_name="Paul", email_id="paul@verretransparence.fr")
+		)
+		result = self.mod.lookup_by_email("Paul <paul@verretransparence.fr>")
+		self.assertTrue(result["internal"])
+		self.assertIsNone(result["match_type"])
+		self.assertEqual(result["customers"], [])
+		self.assertEqual(self.fake.calls, [])
+
+	def test_user_domain_does_not_fall_back(self):
+		result = self.mod.lookup_by_email("inconnu@verretransparence.fr")
+		self.assertTrue(result["internal"])
+		self.assertEqual(result["customers"], [])
+		self.assertFalse(_uses_like(self.fake.calls))
+
+	def test_exact_match_on_user_domain_still_works(self):
+		result = self.mod.lookup_by_email("chantier@verretransparence.fr")
+		self.assertFalse(result["internal"])
+		self.assertEqual(result["match_type"], "exact")
+		self.assertEqual([row["name"] for row in result["customers"]], ["CUST-I"])
+
+	def test_user_on_webmail_does_not_block_other_webmail_senders(self):
+		self.fake.tables["Customer"].append(
+			_customer(name="CUST-G", customer_name="Gmail", email_id="client@gmail.com")
+		)
+		result = self.mod.lookup_by_email("client@gmail.com")
+		self.assertFalse(result["internal"])
+		self.assertEqual([row["name"] for row in result["customers"]], ["CUST-G"])
