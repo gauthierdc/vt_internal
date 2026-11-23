@@ -36,7 +36,12 @@ app_include_js = [
 
 # include js, css files in header of web template
 # web_include_css = "/assets/vt_internal/css/vt_internal.css"
-# web_include_js = "/assets/vt_internal/js/vt_internal.js"
+# Nom de bundle nu : bundled_asset() le résout via assets.json (fichier haché).
+# Le script ne s'active que sur /bon-pour-accord-devis. webform_include_js ne
+# suffit pas : Frappe 15 ne l'injecte que pour un Web Form standard.
+web_include_js = [
+	"bon_pour_accord_paiement.bundle.js",
+]
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "vt_internal/public/scss/website"
