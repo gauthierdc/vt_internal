@@ -349,17 +349,16 @@ frappe.provide("frappe.vt");
 	}
 
 	function applyVisibility() {
+		// setProp("display") est interdit ici. Avec le bundle FullCalendar du
+		// 26/11/2026, chaque setProp réémet eventsSet après le tour courant
+		// (le garde state.applying ne suffit pas) et fige la vue. Le masquage
+		// est uniquement la classe vt-cal-hidden : eventClassNames au rendu,
+		// et cette bascule DOM quand le filtre change sans re-render.
 		if (state.applying) return;
 		const cal = state.cal;
 		if (!cal) return;
 		state.applying = true;
 		try {
-			collectCalendarEvents(cal).forEach((ev) => {
-				const show = isVisible(eventEmployee(ev));
-				if (typeof ev.setProp === "function") {
-					ev.setProp("display", show ? "auto" : "none");
-				}
-			});
 			const $root = cal.$wrapper || (cal.list_view && cal.list_view.$result);
 			if ($root && $root.length) {
 				$root.find(".fc-event").each(function () {
@@ -651,12 +650,10 @@ frappe.provide("frappe.vt");
 				? frappe.utils.debounce(cal.__vt_layout_resize, 200)
 				: cal.__vt_layout_resize);
 		}
+		// eventsSet n'est branché qu'une fois, via cal_options dans setup_options.
+		// fc.on("eventsSet") en plus rappelait le même traitement une deuxième fois.
 		if (typeof fc.on === "function") {
 			fc.on("datesSet", (info) => refreshEmployees(cal, info));
-			fc.on("eventsSet", (events) => {
-				syncEmployeesFromEvents(cal, events);
-				applyVisibility();
-			});
 		}
 		const view = fc.view || (typeof fc.getView === "function" && fc.getView());
 		if (view && (view.activeStart || view.activeEnd)) {
